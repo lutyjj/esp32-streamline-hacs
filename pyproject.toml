@@ -10,7 +10,7 @@ dev = [
   "datamodel-code-generator==0.66.1",
   "homeassistant==2026.7.2",
   "mypy==1.20.2",
-  "pytest==9.0.3",
+  # The Home Assistant test harness owns its compatible pytest pin.
   "pytest-homeassistant-custom-component==0.13.346",
   "ruff==0.15.21",
 ]

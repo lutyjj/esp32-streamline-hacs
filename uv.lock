@@ -851,7 +851,6 @@ dev = [
     { name = "datamodel-code-generator" },
     { name = "homeassistant" },
     { name = "mypy" },
-    { name = "pytest" },
     { name = "pytest-homeassistant-custom-component" },
     { name = "ruff" },
 ]
@@ -863,7 +862,6 @@ dev = [
     { name = "datamodel-code-generator", specifier = "==0.66.1" },
     { name = "homeassistant", specifier = "==2026.7.2" },
     { name = "mypy", specifier = "==1.20.2" },
-    { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.346" },
     { name = "ruff", specifier = "==0.15.21" },
 ]
