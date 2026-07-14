@@ -15,6 +15,8 @@ from .errors import StreamLineApiError, StreamLineAuthenticationError
 from .models import AutoUpdateScheduleRequest, ConfigResponse, StatusResponse
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from homeassistant.core import HomeAssistant
 
     from .api import StreamLineDeviceClient
@@ -48,6 +50,7 @@ class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
             update_interval=UPDATE_INTERVAL,
             always_update=False,
         )
+        self._entry = entry
         self.client = client
         self._validate_auth = client.has_admin_key
         self._settings: ConfigResponse | None = None
@@ -90,23 +93,25 @@ class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
     ) -> None:
         """Update selected audio controls while preserving the rest."""
         current = self.status.audio
-        await self.client.async_set_audio(
-            current.input_line if input_line is None else input_line,
-            current.input_gain if input_gain is None else input_gain,
-            current.adc_attenuation_db if adc_attenuation_db is None else adc_attenuation_db,
+        await self._async_authenticated_call(
+            self.client.async_set_audio(
+                current.input_line if input_line is None else input_line,
+                current.input_gain if input_gain is None else input_gain,
+                current.adc_attenuation_db if adc_attenuation_db is None else adc_attenuation_db,
+            )
         )
         await self.async_request_refresh()
 
     async def async_set_analog_passthrough(self, enabled: bool) -> None:
         """Update local analog output and refresh every entity."""
-        await self.client.async_set_analog_passthrough(enabled)
+        await self._async_authenticated_call(self.client.async_set_analog_passthrough(enabled))
         await self.async_request_refresh()
 
     async def async_set_update_schedule(self, schedule: str) -> None:
         """Update the automatic firmware schedule and its cached settings."""
         if schedule not in UPDATE_SCHEDULES:
             raise ValueError(f"unsupported update schedule: {schedule}")
-        await self.client.async_set_update_schedule(schedule)
+        await self._async_authenticated_call(self.client.async_set_update_schedule(schedule))
         self._settings = self.settings.model_copy(
             update={
                 "auto_update_schedule": AutoUpdateScheduleRequest.model_validate(schedule),
@@ -116,13 +121,21 @@ class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
 
     async def async_check_firmware_update(self) -> None:
         """Start a firmware update check and refresh its reported phase."""
-        await self.client.async_check_firmware_update()
+        await self._async_authenticated_call(self.client.async_check_firmware_update())
         await self.async_request_refresh()
 
     async def async_install_firmware_update(self) -> None:
         """Start the latest firmware install and refresh its reported phase."""
-        await self.client.async_install_firmware_update()
+        await self._async_authenticated_call(self.client.async_install_firmware_update())
         await self.async_request_refresh()
+
+    async def _async_authenticated_call(self, request: Awaitable[object]) -> None:
+        """Start reauthentication when a device rejects a saved admin key."""
+        try:
+            await request
+        except StreamLineAuthenticationError:
+            self._entry.async_start_reauth(self.hass)
+            raise
 
 
 type StreamLineConfigEntry = ConfigEntry[StreamLineCoordinator]
