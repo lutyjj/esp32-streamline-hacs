@@ -7,9 +7,9 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-  "datamodel-code-generator==0.66.1",
+  "datamodel-code-generator==0.68.1",
   "homeassistant==2026.7.2",
-  "mypy==1.20.2",
+  "mypy==2.3.0",
   # The Home Assistant test harness owns its compatible pytest pin.
   "pytest-homeassistant-custom-component==0.13.346",
   "ruff==0.15.21",
