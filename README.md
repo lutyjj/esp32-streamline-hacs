@@ -46,4 +46,4 @@ CI fetches the same contract and fails when the generated models or the client's
 
 ## License
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE)
