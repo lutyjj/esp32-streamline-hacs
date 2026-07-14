@@ -1,12 +1,14 @@
 {
   "domain": "streamline",
   "name": "ESP32 StreamLine",
-  "codeowners": ["@lutyjj"],
+  "codeowners": [
+    "@lutyjj"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/lutyjj/esp32-streamline-hacs",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/lutyjj/esp32-streamline-hacs/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }
