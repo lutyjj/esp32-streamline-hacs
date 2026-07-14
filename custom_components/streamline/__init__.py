@@ -1,4 +1,4 @@
-"""Home Assistant integration for the ESP32 StreamLine bridge."""
+"""Home Assistant integration for ESP32 StreamLine devices."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import StreamLineBridgeClient
-from .const import CONF_API_TOKEN, CONF_BRIDGE_URL, PLATFORMS
+from .api import StreamLineDeviceClient
+from .const import CONF_ADMIN_KEY, CONF_DEVICE_URL, PLATFORMS
 from .coordinator import StreamLineCoordinator
 
 if TYPE_CHECKING:
@@ -17,11 +17,11 @@ if TYPE_CHECKING:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: StreamLineConfigEntry) -> bool:
-    """Connect one bridge and start its shared coordinator."""
-    client = StreamLineBridgeClient(
+    """Connect one StreamLine device and start its coordinator."""
+    client = StreamLineDeviceClient(
         async_get_clientsession(hass),
-        entry.data[CONF_BRIDGE_URL],
-        entry.data.get(CONF_API_TOKEN),
+        entry.data[CONF_DEVICE_URL],
+        entry.data.get(CONF_ADMIN_KEY),
     )
     coordinator = StreamLineCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
@@ -31,5 +31,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: StreamLineConfigEntry) -
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: StreamLineConfigEntry) -> bool:
-    """Unload every platform of one bridge entry."""
+    """Unload every platform of one device entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

@@ -1,14 +1,14 @@
-"""Recording control for StreamLine bridge sources."""
+"""Local analog output control for StreamLine devices."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.util import dt as dt_util
 
-from .entity import StreamLineSourceEntity, async_add_source_entities
+from .entity import StreamLineWritableEntity
 from .errors import StreamLineApiError
 
 if TYPE_CHECKING:
@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import StreamLineConfigEntry
-    from .models import RecordingSnapshot
 
 
 async def async_setup_entry(
@@ -24,59 +23,35 @@ async def async_setup_entry(
     entry: StreamLineConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Add one recording switch per bridge source."""
-    async_add_source_entities(
-        entry,
-        async_add_entities,
-        lambda source: (StreamLineRecordingSwitch(entry, source),),
-    )
+    """Add analog passthrough when the selected board supports it."""
+    if entry.runtime_data.data.capabilities.analog_passthrough is not None:
+        async_add_entities([StreamLineAnalogPassthroughSwitch(entry)])
 
 
-class StreamLineRecordingSwitch(StreamLineSourceEntity, SwitchEntity):
-    """Start or stop the recording session of one source."""
+class StreamLineAnalogPassthroughSwitch(StreamLineWritableEntity, SwitchEntity):
+    """Control the board's local analog output route."""
 
-    _attr_translation_key = "recording"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "analog_passthrough"
 
-    def __init__(self, entry: StreamLineConfigEntry, source: str) -> None:
-        super().__init__(entry, source, "recording")
+    def __init__(self, entry: StreamLineConfigEntry) -> None:
+        super().__init__(entry, "analog_passthrough")
 
     @property
-    def available(self) -> bool:
-        """Require a current source and authenticated recording storage."""
-        return super().available and self.coordinator.data.recordings is not None
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return whether this source owns an active recording session."""
-        if self.coordinator.data.recordings is None:
-            return None
-        return self._active_recording is not None
+    def is_on(self) -> bool:
+        """Return the configured passthrough state."""
+        return self.coordinator.data.analog_passthrough.enabled
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Start a recording with a timestamped title."""
-        if self._active_recording is not None:
-            return
-        title = f"Recording {dt_util.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        try:
-            await self.coordinator.async_start_recording(self._source, title)
-        except StreamLineApiError as exc:
-            raise HomeAssistantError(str(exc)) from exc
+        """Enable local analog passthrough."""
+        await self._async_set_enabled(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Stop and finalize the active session of this source."""
-        if (recording := self._active_recording) is None:
-            return
+        """Disable local analog passthrough."""
+        await self._async_set_enabled(False)
+
+    async def _async_set_enabled(self, enabled: bool) -> None:
         try:
-            await self.coordinator.async_stop_recording(recording.id)
+            await self.coordinator.async_set_analog_passthrough(enabled)
         except StreamLineApiError as exc:
             raise HomeAssistantError(str(exc)) from exc
-
-    @property
-    def _active_recording(self) -> RecordingSnapshot | None:
-        """Return this source's session from the bridge's active list."""
-        if (recordings := self.coordinator.data.recordings) is None:
-            return None
-        return next(
-            (recording for recording in recordings.active if recording.source == self._source),
-            None,
-        )

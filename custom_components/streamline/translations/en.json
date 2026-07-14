@@ -1,68 +1,89 @@
 {
   "config": {
     "abort": {
-      "already_configured": "This bridge is already configured.",
-      "reauth_successful": "The API token was updated.",
-      "reconfigure_successful": "The bridge settings were updated."
+      "already_configured": "This device is already configured.",
+      "reauth_successful": "The admin key was updated.",
+      "reconfigure_successful": "The device settings were updated."
     },
     "error": {
-      "cannot_connect": "Could not connect to the bridge. Check the URL and the network.",
-      "invalid_auth": "The bridge rejected this API token.",
-      "invalid_response": "The bridge returned an unexpected response. Update the bridge and this integration to matching versions.",
-      "invalid_url": "Enter an HTTP or HTTPS bridge root URL without a path or query."
+      "cannot_connect": "Could not connect to the device. Check the URL and the network.",
+      "invalid_auth": "The device rejected this admin key.",
+      "invalid_response": "The device returned an unexpected response. Update the device and this integration to matching versions.",
+      "invalid_url": "Enter an HTTP or HTTPS device root URL without a path or query."
     },
     "step": {
       "reauth_confirm": {
         "data": {
-          "api_token": "API token"
+          "admin_key": "Admin key"
         },
-        "description": "The bridge rejected the saved API token. Enter the token configured on the bridge.",
-        "title": "Update the API token"
+        "description": "The device rejected the saved admin key. Enter the key configured on the device.",
+        "title": "Update the admin key"
       },
       "reconfigure": {
         "data": {
-          "api_token": "API token",
-          "bridge_url": "Bridge URL"
+          "admin_key": "Admin key",
+          "device_url": "Device URL"
         },
         "data_description": {
-          "api_token": "API token configured on the bridge. Leave empty for read-only access.",
-          "bridge_url": "Root URL of the bridge HTTP API, for example http://192.0.2.1:8088."
+          "admin_key": "Admin key configured on the device. Leave empty for read-only access.",
+          "device_url": "Root URL of the ESP32 device API, for example http://192.0.2.1."
         },
-        "title": "Reconfigure the StreamLine bridge"
+        "title": "Reconfigure the StreamLine device"
       },
       "user": {
         "data": {
-          "api_token": "API token",
-          "bridge_url": "Bridge URL"
+          "admin_key": "Admin key",
+          "device_url": "Device URL"
         },
         "data_description": {
-          "api_token": "API token configured on the bridge. Leave empty for read-only access.",
-          "bridge_url": "Root URL of the bridge HTTP API, for example http://192.0.2.1:8088."
+          "admin_key": "Admin key configured on the device. Leave empty for read-only access.",
+          "device_url": "Root URL of the ESP32 device API, for example http://192.0.2.1."
         },
-        "title": "Connect to a StreamLine bridge"
+        "title": "Connect to a StreamLine device"
       }
     }
   },
   "entity": {
     "binary_sensor": {
-      "audio_streaming": {
-        "name": "Audio streaming"
+      "playing": {
+        "name": "Playing"
+      }
+    },
+    "number": {
+      "adc_attenuation": {
+        "name": "ADC attenuation"
+      },
+      "input_gain": {
+        "name": "Input gain"
+      }
+    },
+    "select": {
+      "input": {
+        "name": "Input"
       }
     },
     "sensor": {
-      "listeners": {
-        "name": "Listeners"
+      "health": {
+        "name": "Health",
+        "state": {
+          "blocking": "Blocking",
+          "info": "Info",
+          "ok": "OK"
+        }
       },
-      "lost_packets": {
-        "name": "Lost packets"
+      "network_errors": {
+        "name": "Network errors"
       },
       "peak_level": {
         "name": "Peak level"
+      },
+      "wifi_signal": {
+        "name": "Wi-Fi signal"
       }
     },
     "switch": {
-      "recording": {
-        "name": "Recording"
+      "analog_passthrough": {
+        "name": "Analog passthrough"
       }
     }
   }

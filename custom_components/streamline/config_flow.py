@@ -1,4 +1,4 @@
-"""UI configuration for StreamLine bridges."""
+"""UI configuration for StreamLine devices."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 from yarl import URL
 
-from .api import StreamLineBridgeClient, normalize_bridge_url
-from .const import CONF_API_TOKEN, CONF_BRIDGE_URL, DOMAIN
+from .api import StreamLineDeviceClient, normalize_device_url
+from .const import CONF_ADMIN_KEY, CONF_DEVICE_URL, DOMAIN
 from .errors import (
     StreamLineApiError,
     StreamLineAuthenticationError,
@@ -22,22 +22,22 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
-DEFAULT_BRIDGE_URL = "http://homeassistant.local:8088"
+DEFAULT_DEVICE_URL = "http://streamline.local"
 
 
 class StreamLineConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Configure one StreamLine bridge."""
+    """Configure one StreamLine device."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Create an entry for one verified bridge URL."""
+        """Create an entry for one verified device URL."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            data, errors = await self._async_validated_data(user_input)
+            data, title, errors = await self._async_validated_data(user_input)
             if not errors:
-                self._async_abort_entries_match({CONF_BRIDGE_URL: data[CONF_BRIDGE_URL]})
-                return self.async_create_entry(title=_entry_title(data[CONF_BRIDGE_URL]), data=data)
+                self._async_abort_entries_match({CONF_DEVICE_URL: data[CONF_DEVICE_URL]})
+                return self.async_create_entry(title=title, data=data)
         return self.async_show_form(
             step_id="user", data_schema=_schema(user_input or {}), errors=errors
         )
@@ -45,11 +45,11 @@ class StreamLineConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Replace the bridge URL or API token after verification."""
+        """Replace the device URL or admin key after verification."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            data, errors = await self._async_validated_data(user_input)
+            data, _title, errors = await self._async_validated_data(user_input)
             if not errors:
                 return self.async_update_reload_and_abort(entry, data=data)
         return self.async_show_form(
@@ -59,63 +59,64 @@ class StreamLineConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
-        """Start the repair flow for a rejected API token."""
+        """Start the repair flow for a rejected admin key."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Verify and save a replacement API token."""
+        """Verify and save a replacement admin key."""
         entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            data, errors = await self._async_validated_data({**entry.data, **user_input})
+            data, _title, errors = await self._async_validated_data({**entry.data, **user_input})
             if not errors:
                 return self.async_update_reload_and_abort(entry, data=data)
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_API_TOKEN): TOKEN_SELECTOR}),
+            data_schema=vol.Schema({vol.Required(CONF_ADMIN_KEY): TOKEN_SELECTOR}),
             errors=errors,
         )
 
     async def _async_validated_data(
         self, user_input: Mapping[str, Any]
-    ) -> tuple[dict[str, str], dict[str, str]]:
-        """Verify bridge access and return normalized entry data."""
+    ) -> tuple[dict[str, str], str, dict[str, str]]:
+        """Verify device access and return normalized entry data."""
         try:
-            bridge_url = normalize_bridge_url(str(user_input.get(CONF_BRIDGE_URL, "")))
+            device_url = normalize_device_url(str(user_input.get(CONF_DEVICE_URL, "")))
         except StreamLineApiError:
-            return {}, {CONF_BRIDGE_URL: "invalid_url"}
-        token = str(user_input.get(CONF_API_TOKEN, "")).strip()
-        client = StreamLineBridgeClient(
-            async_get_clientsession(self.hass), bridge_url, token or None
+            return {}, "", {CONF_DEVICE_URL: "invalid_url"}
+        admin_key = str(user_input.get(CONF_ADMIN_KEY, "")).strip()
+        client = StreamLineDeviceClient(
+            async_get_clientsession(self.hass), device_url, admin_key or None
         )
         try:
-            await client.async_get_status()
-            if token:
+            status = await client.async_get_status()
+            if admin_key:
                 await client.async_unlock()
         except StreamLineAuthenticationError:
-            return {}, {CONF_API_TOKEN: "invalid_auth"}
+            return {}, "", {CONF_ADMIN_KEY: "invalid_auth"}
         except StreamLineCannotConnect:
-            return {}, {"base": "cannot_connect"}
+            return {}, "", {"base": "cannot_connect"}
         except StreamLineApiError:
-            return {}, {"base": "invalid_response"}
-        data = {CONF_BRIDGE_URL: bridge_url}
-        if token:
-            data[CONF_API_TOKEN] = token
-        return data, {}
+            return {}, "", {"base": "invalid_response"}
+        data = {CONF_DEVICE_URL: device_url}
+        if admin_key:
+            data[CONF_ADMIN_KEY] = admin_key
+        title = status.device_name.strip() or _entry_title(device_url)
+        return data, title, {}
 
 
 def _schema(defaults: Mapping[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(
-                CONF_BRIDGE_URL, default=defaults.get(CONF_BRIDGE_URL, DEFAULT_BRIDGE_URL)
+                CONF_DEVICE_URL, default=defaults.get(CONF_DEVICE_URL, DEFAULT_DEVICE_URL)
             ): str,
-            vol.Optional(CONF_API_TOKEN, default=defaults.get(CONF_API_TOKEN, "")): TOKEN_SELECTOR,
+            vol.Optional(CONF_ADMIN_KEY, default=defaults.get(CONF_ADMIN_KEY, "")): TOKEN_SELECTOR,
         }
     )
 
 
-def _entry_title(bridge_url: str) -> str:
-    return URL(bridge_url).host or bridge_url
+def _entry_title(device_url: str) -> str:
+    return URL(device_url).host or device_url

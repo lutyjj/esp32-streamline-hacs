@@ -1,9 +1,8 @@
-"""One shared bridge poll behind every StreamLine entity."""
+"""One shared device poll behind every StreamLine entity."""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
@@ -12,32 +11,23 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import DOMAIN, UPDATE_INTERVAL
 from .errors import StreamLineApiError, StreamLineAuthenticationError
+from .models import StatusResponse
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .api import StreamLineBridgeClient
-    from .models import BridgeStatus, RecordingList, RecordingSnapshot
-
+    from .api import StreamLineDeviceClient
 LOGGER = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class StreamLineData:
-    """One coherent view of bridge state."""
-
-    status: BridgeStatus
-    recordings: RecordingList | None
-
-
-class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
-    """Poll the bridge once for every entity."""
+class StreamLineCoordinator(DataUpdateCoordinator[StatusResponse]):
+    """Poll one StreamLine device for every entity."""
 
     def __init__(
         self,
         hass: HomeAssistant,
         entry: ConfigEntry,
-        client: StreamLineBridgeClient,
+        client: StreamLineDeviceClient,
     ) -> None:
         super().__init__(
             hass,
@@ -48,36 +38,40 @@ class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
             always_update=False,
         )
         self.client = client
+        self._validate_auth = client.has_admin_key
 
-    async def _async_update_data(self) -> StreamLineData:
+    async def _async_update_data(self) -> StatusResponse:
         try:
             status = await self.client.async_get_status()
-            recordings = await self._async_recordings()
+            if self._validate_auth:
+                await self.client.async_unlock()
+                self._validate_auth = False
         except StreamLineAuthenticationError as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
         except StreamLineApiError as exc:
             raise UpdateFailed(str(exc)) from exc
-        return StreamLineData(status=status, recordings=recordings)
+        return status
 
-    async def _async_recordings(self) -> RecordingList | None:
-        if not self.client.has_api_token:
-            return None
-        capabilities = await self.client.async_get_recording_capabilities()
-        if not capabilities.enabled:
-            return None
-        return await self.client.async_get_recordings()
-
-    async def async_start_recording(self, source: str, title: str) -> RecordingSnapshot:
-        """Start recording one source and refresh all entities."""
-        recording = await self.client.async_start_recording(source, title)
+    async def async_set_audio(
+        self,
+        *,
+        input_line: int | None = None,
+        input_gain: int | None = None,
+        adc_attenuation_db: int | None = None,
+    ) -> None:
+        """Update selected audio controls while preserving the rest."""
+        current = self.data.audio
+        await self.client.async_set_audio(
+            current.input_line if input_line is None else input_line,
+            current.input_gain if input_gain is None else input_gain,
+            current.adc_attenuation_db if adc_attenuation_db is None else adc_attenuation_db,
+        )
         await self.async_request_refresh()
-        return recording
 
-    async def async_stop_recording(self, recording_id: str) -> RecordingSnapshot:
-        """Stop a recording and refresh all entities."""
-        recording = await self.client.async_stop_recording(recording_id)
+    async def async_set_analog_passthrough(self, enabled: bool) -> None:
+        """Update local analog output and refresh every entity."""
+        await self.client.async_set_analog_passthrough(enabled)
         await self.async_request_refresh()
-        return recording
 
 
 type StreamLineConfigEntry = ConfigEntry[StreamLineCoordinator]

@@ -7,13 +7,14 @@ HASSFEST_IMAGE := esp32-streamline-hacs-hassfest
 SOURCE := custom_components/streamline
 TESTS := tests
 MODELS := $(SOURCE)/models.py
+GENERATED_MODELS := .models.generated.py
 STREAMLINE_REF ?= mainline
-OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/bridge-openapi.json
+OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
 
 CONTAINER_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/workspace" \
 	-e HOME=/tmp -e MYPY_CACHE_DIR=/tmp/mypy -e PYTHONDONTWRITEBYTECODE=1 \
-	-e RUFF_CACHE_DIR=/tmp/ruff -e STREAMLINE_OPENAPI=/tmp/bridge-openapi.json \
+	-e RUFF_CACHE_DIR=/tmp/ruff -e STREAMLINE_OPENAPI=/tmp/device-openapi.json \
 	-w /workspace $(DEV_IMAGE)
 LOCK_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/workspace" -e UV_CACHE_DIR=/tmp/uv-cache \
@@ -26,7 +27,9 @@ define render_models
 		--enum-field-as-literal all --use-annotated --extra-fields ignore \
 		--disable-timestamp --formatters builtin \
 		--output $(1) && \
-	ruff format $(1) && ruff check --fix $(1) && ruff format $(1)
+	ruff format --config pyproject.toml --line-length 100 $(1) && \
+	ruff check --config pyproject.toml --fix --ignore E501 $(1) && \
+	ruff format --config pyproject.toml --line-length 100 $(1)
 endef
 
 .PHONY: check dev-image format generate generate-check hassfest hassfest-image lint lock lock-check lock-image lock-upgrade quality test
@@ -50,7 +53,8 @@ generate: dev-image
 	$(CONTAINER_RUN) sh -c '$(call render_models,$(MODELS))'
 
 generate-check: dev-image
-	$(CONTAINER_RUN) sh -c '$(call render_models,/tmp/models.py) && diff -u $(MODELS) /tmp/models.py'
+	$(CONTAINER_RUN) sh -c 'trap "rm -f $(GENERATED_MODELS)" EXIT; \
+		$(call render_models,$(GENERATED_MODELS)) && diff -u $(MODELS) $(GENERATED_MODELS)'
 
 format: dev-image
 	$(CONTAINER_RUN) sh -c 'ruff check --select I --fix $(SOURCE) $(TESTS) && ruff format $(SOURCE) $(TESTS)'

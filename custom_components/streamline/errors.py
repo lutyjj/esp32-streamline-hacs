@@ -1,13 +1,13 @@
-"""Errors raised by the StreamLine bridge client."""
+"""Errors raised by the StreamLine device client."""
 
 
 class StreamLineApiError(Exception):
-    """The bridge rejected a request or returned an invalid response."""
+    """The device rejected a request or returned an invalid response."""
 
 
 class StreamLineAuthenticationError(StreamLineApiError):
-    """The bridge rejected the API token."""
+    """The device rejected the admin key."""
 
 
 class StreamLineCannotConnect(StreamLineApiError):
-    """The bridge could not be reached."""
+    """The device could not be reached."""

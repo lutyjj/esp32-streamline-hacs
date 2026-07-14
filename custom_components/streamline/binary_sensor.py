@@ -1,4 +1,4 @@
-"""Streaming-state sensor for StreamLine bridge sources."""
+"""Playback state for StreamLine devices."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 
-from .entity import StreamLineSourceEntity, async_add_source_entities
+from .entity import StreamLineEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -20,26 +20,20 @@ async def async_setup_entry(
     entry: StreamLineConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Add one streaming sensor per bridge source."""
-    async_add_source_entities(
-        entry,
-        async_add_entities,
-        lambda source: (StreamLineStreamingSensor(entry, source),),
-    )
+    """Add the device playback sensor."""
+    async_add_entities([StreamLinePlayingSensor(entry)])
 
 
-class StreamLineStreamingSensor(StreamLineSourceEntity, BinarySensorEntity):
-    """Report whether a source has an active PCM producer connection."""
+class StreamLinePlayingSensor(StreamLineEntity, BinarySensorEntity):
+    """Report whether signal detection is streaming audio."""
 
-    _attr_device_class = BinarySensorDeviceClass.RUNNING
-    _attr_translation_key = "audio_streaming"
+    _attr_device_class = BinarySensorDeviceClass.SOUND
+    _attr_translation_key = "playing"
 
-    def __init__(self, entry: StreamLineConfigEntry, source: str) -> None:
-        super().__init__(entry, source, "audio_streaming")
+    def __init__(self, entry: StreamLineConfigEntry) -> None:
+        super().__init__(entry, "playing")
 
     @property
-    def is_on(self) -> bool | None:
-        """Return whether the source connection delivers audio."""
-        if (snapshot := self.source_snapshot) is None:
-            return None
-        return snapshot.lifecycle.state == "connected"
+    def is_on(self) -> bool:
+        """Return the device's signal-gate state."""
+        return self.coordinator.data.metrics.playing

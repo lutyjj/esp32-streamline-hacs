@@ -1,73 +1,59 @@
-"""Entity behavior tests across coordinator polls and source changes."""
+"""Entity behavior tests across polling and authenticated controls."""
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.streamline.const import CONF_API_TOKEN, CONF_BRIDGE_URL, DOMAIN
+from custom_components.streamline.const import CONF_ADMIN_KEY, CONF_DEVICE_URL, DOMAIN
 
-from .bridge_payloads import (
-    BRIDGE_URL,
-    SOURCE,
-    bridge_status,
-    error_response,
-    recording_capabilities,
-    recording_list,
-    recording_result,
-    recording_snapshot,
-    source_snapshot,
-)
+from .device_payloads import DEVICE_URL, device_status, error_response
 
 if TYPE_CHECKING:
-    from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
     from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-TOKEN = "api-token-1234"
-STREAMING_SENSOR = "binary_sensor.streamline_source_192_0_2_10_audio_streaming"
-PEAK_SENSOR = "sensor.streamline_source_192_0_2_10_peak_level"
-LISTENERS_SENSOR = "sensor.streamline_source_192_0_2_10_listeners"
-RECORDING_SWITCH = "switch.streamline_source_192_0_2_10_recording"
+ADMIN_KEY = "admin-key-1234"
+PLAYING_SENSOR = "binary_sensor.living_room_streamline_playing"
+PEAK_SENSOR = "sensor.living_room_streamline_peak_level"
+WIFI_SENSOR = "sensor.living_room_streamline_wi_fi_signal"
+HEALTH_SENSOR = "sensor.living_room_streamline_health"
+INPUT_SELECT = "select.living_room_streamline_input"
+GAIN_NUMBER = "number.living_room_streamline_input_gain"
+ATTENUATION_NUMBER = "number.living_room_streamline_adc_attenuation"
+PASSTHROUGH_SWITCH = "switch.living_room_streamline_analog_passthrough"
 
 
-def stub_bridge(
+def stub_device(
     aioclient_mock: AiohttpClientMocker,
     *,
     status: dict[str, Any] | None = None,
-    capabilities: dict[str, Any] | None = None,
-    recordings: dict[str, Any] | None = None,
+    unlock_status: int = 200,
 ) -> None:
-    """Stub one coordinator poll."""
-    aioclient_mock.get(f"{BRIDGE_URL}/status", json=status or bridge_status())
-    aioclient_mock.get(
-        f"{BRIDGE_URL}/api/recordings/capabilities",
-        json=capabilities or recording_capabilities(),
+    """Stub coordinator reads and initial authentication."""
+    aioclient_mock.get(f"{DEVICE_URL}/api/status", json=status or device_status())
+    aioclient_mock.post(
+        f"{DEVICE_URL}/api/unlock",
+        status=unlock_status,
+        json={"ok": True} if unlock_status == 200 else error_response("invalid admin key"),
     )
-    aioclient_mock.get(f"{BRIDGE_URL}/api/recordings", json=recordings or recording_list())
 
 
-async def setup_integration(hass: HomeAssistant, *, token: str | None = TOKEN) -> MockConfigEntry:
-    """Set up one mocked integration entry."""
-    data = {CONF_BRIDGE_URL: BRIDGE_URL}
-    if token is not None:
-        data[CONF_API_TOKEN] = token
-    entry = MockConfigEntry(domain=DOMAIN, title="bridge.local", data=data)
+async def setup_integration(
+    hass: HomeAssistant, *, admin_key: str | None = ADMIN_KEY
+) -> MockConfigEntry:
+    """Set up one mocked device entry."""
+    data = {CONF_DEVICE_URL: DEVICE_URL}
+    if admin_key is not None:
+        data[CONF_ADMIN_KEY] = admin_key
+    entry = MockConfigEntry(domain=DOMAIN, title="Living Room StreamLine", data=data)
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
-
-
-async def poll_once(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
-    """Advance past one coordinator interval and settle the poll."""
-    freezer.tick(timedelta(seconds=6))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
 
 
 def state_of(hass: HomeAssistant, entity_id: str) -> str:
@@ -77,107 +63,112 @@ def state_of(hass: HomeAssistant, entity_id: str) -> str:
     return state.state
 
 
-async def test_source_entities_report_bridge_state(
+async def test_entities_report_device_state_and_limits(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    stub_bridge(aioclient_mock)
+    stub_device(aioclient_mock)
 
     await setup_integration(hass)
 
-    assert state_of(hass, STREAMING_SENSOR) == STATE_ON
+    assert state_of(hass, PLAYING_SENSOR) == STATE_ON
     assert state_of(hass, PEAK_SENSOR) == "50.0"
-    assert state_of(hass, LISTENERS_SENSOR) == "1"
-    assert state_of(hass, RECORDING_SWITCH) == STATE_OFF
+    assert state_of(hass, WIFI_SENSOR) == "-54"
+    assert state_of(hass, HEALTH_SENSOR) == "ok"
+    assert state_of(hass, INPUT_SELECT) == "Line 2"
+    assert state_of(hass, GAIN_NUMBER) == "25"
+    assert state_of(hass, ATTENUATION_NUMBER) == "3"
+    assert state_of(hass, PASSTHROUGH_SWITCH) == STATE_OFF
+
+    gain = hass.states.get(GAIN_NUMBER)
+    attenuation = hass.states.get(ATTENUATION_NUMBER)
+    assert gain is not None
+    assert attenuation is not None
+    assert gain.attributes["max"] == 100
+    assert attenuation.attributes["max"] == 12
 
 
-async def test_tokenless_entry_is_read_only(
+async def test_read_only_entry_keeps_monitoring_and_disables_controls(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    stub_bridge(aioclient_mock)
+    stub_device(aioclient_mock)
 
-    await setup_integration(hass, token=None)
+    await setup_integration(hass, admin_key=None)
 
-    assert state_of(hass, STREAMING_SENSOR) == STATE_ON
-    assert state_of(hass, RECORDING_SWITCH) == STATE_UNAVAILABLE
-    assert all(call[1].path == "/status" for call in aioclient_mock.mock_calls)
+    assert state_of(hass, PLAYING_SENSOR) == STATE_ON
+    assert state_of(hass, INPUT_SELECT) == STATE_UNAVAILABLE
+    assert state_of(hass, GAIN_NUMBER) == STATE_UNAVAILABLE
+    assert state_of(hass, PASSTHROUGH_SWITCH) == STATE_UNAVAILABLE
+    assert all(call[1].path == "/api/status" for call in aioclient_mock.mock_calls)
 
 
-async def test_switch_is_unavailable_without_recording_storage(
+async def test_audio_control_preserves_other_values(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    stub_bridge(aioclient_mock, capabilities=recording_capabilities(enabled=False))
-
-    await setup_integration(hass)
-
-    assert state_of(hass, RECORDING_SWITCH) == STATE_UNAVAILABLE
-
-
-async def test_switch_starts_and_stops_source_recording(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
-) -> None:
-    stub_bridge(aioclient_mock)
-    aioclient_mock.post(f"{BRIDGE_URL}/api/recordings", json=recording_result(recording_snapshot()))
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
     await setup_integration(hass)
 
     await hass.services.async_call(
-        "switch", "turn_on", {"entity_id": RECORDING_SWITCH}, blocking=True
+        "number",
+        "set_value",
+        {"entity_id": GAIN_NUMBER, "value": 40},
+        blocking=True,
     )
-    start = next(
+
+    update = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/audio"
+    )
+    assert update[2] == {
+        "adc_attenuation_db": "3",
+        "input_gain": "40",
+        "input_line": "2",
+    }
+
+
+async def test_input_and_passthrough_controls_use_device_api(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/analog-passthrough", json={"ok": True})
+    await setup_integration(hass)
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": INPUT_SELECT, "option": "Line 1"},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "switch", "turn_on", {"entity_id": PASSTHROUGH_SWITCH}, blocking=True
+    )
+
+    audio = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/audio"
+    )
+    passthrough = next(
         call
         for call in aioclient_mock.mock_calls
-        if call[0] == "POST" and call[1].path == "/api/recordings"
+        if call[1].path == "/api/settings/analog-passthrough"
     )
-    assert start[2]["source"] == SOURCE
-    assert start[2]["title"].startswith("Recording ")
-
-    aioclient_mock.clear_requests()
-    stub_bridge(aioclient_mock, recordings=recording_list(active=[recording_snapshot()]))
-    aioclient_mock.post(
-        f"{BRIDGE_URL}/api/recordings/rec-1/stop",
-        json=recording_result(recording_snapshot(state="complete", file_name="rec-1.wav")),
-    )
-    await hass.config_entries.async_reload(
-        next(iter(hass.config_entries.async_entries(DOMAIN))).entry_id
-    )
-    await hass.async_block_till_done()
-    await hass.services.async_call(
-        "switch", "turn_off", {"entity_id": RECORDING_SWITCH}, blocking=True
-    )
-    assert any(call[1].path == "/api/recordings/rec-1/stop" for call in aioclient_mock.mock_calls)
+    assert audio[2]["input_line"] == "1"
+    assert passthrough[2] == {"enabled": "true"}
 
 
-async def test_sources_are_added_and_removed_across_polls(
-    hass: HomeAssistant,
-    aioclient_mock: AiohttpClientMocker,
-    freezer: FrozenDateTimeFactory,
-) -> None:
-    stub_bridge(aioclient_mock)
-    await setup_integration(hass)
-
-    aioclient_mock.clear_requests()
-    stub_bridge(
-        aioclient_mock,
-        status=bridge_status({SOURCE: source_snapshot(), "192.0.2.20": source_snapshot(clients=0)}),
-    )
-    await poll_once(hass, freezer)
-    assert state_of(hass, "binary_sensor.streamline_source_192_0_2_20_audio_streaming") == STATE_ON
-
-    aioclient_mock.clear_requests()
-    stub_bridge(aioclient_mock, status=bridge_status({}))
-    await poll_once(hass, freezer)
-    assert state_of(hass, STREAMING_SENSOR) == STATE_UNAVAILABLE
-
-
-async def test_rejected_token_starts_reauth_flow(
+async def test_passthrough_switch_follows_board_capability(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    aioclient_mock.get(f"{BRIDGE_URL}/status", json=bridge_status())
-    aioclient_mock.get(f"{BRIDGE_URL}/api/recordings/capabilities", json=recording_capabilities())
-    aioclient_mock.get(
-        f"{BRIDGE_URL}/api/recordings",
-        status=401,
-        json=error_response("unauthorized", "Enter the API token configured on this bridge."),
-    )
+    stub_device(aioclient_mock, status=device_status(passthrough_capable=False))
+
+    await setup_integration(hass)
+
+    assert hass.states.get(PASSTHROUGH_SWITCH) is None
+
+
+async def test_rejected_saved_key_starts_reauth_flow(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock, unlock_status=401)
 
     entry = await setup_integration(hass)
 

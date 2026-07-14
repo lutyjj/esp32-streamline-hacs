@@ -5,8 +5,14 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 DOMAIN = "streamline"
-CONF_BRIDGE_URL = "bridge_url"
-CONF_API_TOKEN = "api_token"
+CONF_DEVICE_URL = "device_url"
+CONF_ADMIN_KEY = "admin_key"
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 UPDATE_INTERVAL = timedelta(seconds=5)
