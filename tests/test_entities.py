@@ -134,6 +134,36 @@ async def test_input_and_passthrough_controls_use_device_api(
     assert passthrough[2] == {"enabled": "true"}
 
 
+async def test_duplicate_input_labels_remain_individually_selectable(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    status = device_status()
+    status["capabilities"]["input_lines"] = [
+        {"label": "Line", "line": 1},
+        {"label": "Line", "line": 2},
+    ]
+    stub_device(aioclient_mock, status=status)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
+    await setup_integration(hass)
+
+    input_select = hass.states.get(INPUT_SELECT)
+    assert input_select is not None
+    assert input_select.state == "Line (2)"
+    assert input_select.attributes["options"] == ["Line (1)", "Line (2)"]
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": INPUT_SELECT, "option": "Line (1)"},
+        blocking=True,
+    )
+
+    update = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/audio"
+    )
+    assert update[2]["input_line"] == "1"
+
+
 async def test_passthrough_switch_follows_board_capability(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

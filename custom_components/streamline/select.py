@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from homeassistant.components.select import SelectEntity
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import StreamLineConfigEntry
+    from .models import StatusResponse
 
 
 async def async_setup_entry(
@@ -40,7 +42,7 @@ class StreamLineInputSelect(StreamLineWritableEntity, SelectEntity):
     @property
     def options(self) -> list[str]:
         """Return input labels in board order."""
-        return [option.label for option in self.coordinator.status.capabilities.input_lines]
+        return list(_input_options(self.coordinator.status))
 
     @property
     def current_option(self) -> str | None:
@@ -48,20 +50,16 @@ class StreamLineInputSelect(StreamLineWritableEntity, SelectEntity):
         selected = self.coordinator.status.audio.input_line
         return next(
             (
-                option.label
-                for option in self.coordinator.status.capabilities.input_lines
-                if option.line == selected
+                label
+                for label, line in _input_options(self.coordinator.status).items()
+                if line == selected
             ),
             None,
         )
 
     async def async_select_option(self, option: str) -> None:
         """Select an input while preserving the level controls."""
-        line = next(
-            item.line
-            for item in self.coordinator.status.capabilities.input_lines
-            if item.label == option
-        )
+        line = _input_options(self.coordinator.status)[option]
         try:
             await self.coordinator.async_set_audio(input_line=line)
         except StreamLineApiError as exc:
@@ -89,3 +87,16 @@ class StreamLineUpdateScheduleSelect(StreamLineWritableEntity, SelectEntity):
             await self.coordinator.async_set_update_schedule(option)
         except (StreamLineApiError, ValueError) as exc:
             raise HomeAssistantError(str(exc)) from exc
+
+
+def _input_options(status: StatusResponse) -> dict[str, int]:
+    """Map unique display labels to device-owned input line identifiers."""
+    inputs = status.capabilities.input_lines
+    label_counts = Counter(item.label for item in inputs)
+    options: dict[str, int] = {}
+    for item in inputs:
+        label = item.label if label_counts[item.label] == 1 else f"{item.label} ({item.line})"
+        while label in options:
+            label = f"{label} ({item.line})"
+        options[label] = item.line
+    return options
