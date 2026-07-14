@@ -2,22 +2,20 @@ version: 2
 
 multi-ecosystem-groups:
   integration:
+    commit-message:
+      prefix: build(deps)
     schedule:
       interval: weekly
 
 updates:
   - package-ecosystem: uv
     directory: /
-    commit-message:
-      prefix: build(deps)
     patterns:
       - "*"
     multi-ecosystem-group: integration
 
   - package-ecosystem: docker
     directory: /
-    commit-message:
-      prefix: build(deps)
     patterns:
       - "*"
     multi-ecosystem-group: integration
