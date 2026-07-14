@@ -1,5 +1,7 @@
 # ESP32 StreamLine for Home Assistant
 
+[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lutyjj&repository=esp32-streamline-hacs&category=integration)
+
 [![CI](https://github.com/lutyjj/esp32-streamline-hacs/actions/workflows/ci.yml/badge.svg?branch=mainline)](https://github.com/lutyjj/esp32-streamline-hacs/actions/workflows/ci.yml)
 [![HACS](https://github.com/lutyjj/esp32-streamline-hacs/actions/workflows/validate.yml/badge.svg?branch=mainline)](https://github.com/lutyjj/esp32-streamline-hacs/actions/workflows/validate.yml)
 
