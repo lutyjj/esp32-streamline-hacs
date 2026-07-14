@@ -109,7 +109,7 @@ class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
         await self.client.async_set_update_schedule(schedule)
         self._settings = self.settings.model_copy(
             update={
-                "auto_update_schedule": AutoUpdateScheduleRequest(root=schedule),
+                "auto_update_schedule": AutoUpdateScheduleRequest.model_validate(schedule),
             }
         )
         self.async_set_updated_data(StreamLineData(status=self.status, settings=self._settings))

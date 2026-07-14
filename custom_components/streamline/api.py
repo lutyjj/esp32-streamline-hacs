@@ -29,8 +29,6 @@ from .models import (
 if TYPE_CHECKING:
     from aiohttp import ClientResponse, ClientSession
 
-    from .const import UpdateSchedule
-
 REQUEST_TIMEOUT = ClientTimeout(total=10)
 
 
@@ -95,7 +93,7 @@ class StreamLineDeviceClient:
             form=AnalogPassthroughSettingsRequest(enabled=enabled),
         )
 
-    async def async_set_update_schedule(self, schedule: UpdateSchedule) -> Ack:
+    async def async_set_update_schedule(self, schedule: str) -> Ack:
         """Set the device's automatic firmware update schedule."""
         return await self._request(
             "POST",
@@ -103,7 +101,7 @@ class StreamLineDeviceClient:
             Ack,
             authenticated=True,
             form=FirmwareSettingsRequest(
-                auto_update_schedule=AutoUpdateScheduleRequest(root=schedule)
+                auto_update_schedule=AutoUpdateScheduleRequest.model_validate(schedule)
             ),
         )
 

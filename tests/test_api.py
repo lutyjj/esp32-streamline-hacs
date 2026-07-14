@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 from aiohttp import ClientConnectionError
@@ -25,7 +22,6 @@ if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 ADMIN_KEY = "admin-key-1234"
-OPENAPI: dict[str, Any] = json.loads(Path(os.environ["STREAMLINE_OPENAPI"]).read_text())
 
 
 def client(hass: HomeAssistant, key: str | None = None) -> StreamLineDeviceClient:
@@ -152,47 +148,6 @@ async def test_additive_device_fields_are_forward_compatible(
     status = await client(hass).async_get_status()
 
     assert status.metrics.packets == 42
-
-
-async def test_every_client_operation_matches_openapi_contract(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
-) -> None:
-    """Pin hand-written method, path, and authentication facts to OpenAPI."""
-    aioclient_mock.get(f"{DEVICE_URL}/api/status", json=device_status())
-    aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=device_settings())
-    aioclient_mock.post(f"{DEVICE_URL}/api/unlock", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/settings/analog-passthrough", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/settings/firmware", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/ota/check", status=202, json={"started": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/ota/update", status=202, json={"started": True})
-
-    device = client(hass, ADMIN_KEY)
-    await device.async_get_status()
-    await device.async_get_settings()
-    await device.async_unlock()
-    await device.async_set_audio(2, 25, 3)
-    await device.async_set_analog_passthrough(True)
-    await device.async_set_update_schedule("weekly")
-    await device.async_check_firmware_update()
-    await device.async_install_firmware_update()
-    exercised = {
-        "async_check_firmware_update",
-        "async_get_settings",
-        "async_get_status",
-        "async_install_firmware_update",
-        "async_set_update_schedule",
-        "async_unlock",
-        "async_set_audio",
-        "async_set_analog_passthrough",
-    }
-
-    public = {name for name in dir(StreamLineDeviceClient) if name.startswith("async_")}
-    assert public == exercised
-    for method, url, _body, headers in aioclient_mock.mock_calls:
-        operation = OPENAPI["paths"][url.path][method.lower()]
-        requires_bearer = any("bearer_auth" in rule for rule in operation.get("security") or [])
-        assert ("Authorization" in (headers or {})) == requires_bearer, (method, url.path)
 
 
 def test_normalize_device_url_canonicalizes_root() -> None:

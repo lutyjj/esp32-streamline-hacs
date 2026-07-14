@@ -69,15 +69,17 @@ make check
 ```
 
 `custom_components/streamline/models.py` is generated from the device OpenAPI
-schemas on the StreamLine `mainline` branch. Regenerate it after a device
-contract change:
+contract pinned in the Makefile. Advance that pin when the integration requires
+a newer firmware contract, then regenerate the models:
 
 ```sh
 make generate
 ```
 
-CI fails when the generated models or the client's method, path, and
-authentication behavior drift from that contract.
+CI fails when generated models, supported operations, translations, or client
+request behavior drift from the pinned contract. A scheduled job checks the
+StreamLine `mainline` contract as an early warning without changing or releasing
+either repository.
 
 ## Release
 

@@ -7,7 +7,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-  "datamodel-code-generator[http]==0.66.1",
+  "datamodel-code-generator==0.66.1",
   "homeassistant==2026.7.2",
   "mypy==1.20.2",
   "pytest==9.0.3",

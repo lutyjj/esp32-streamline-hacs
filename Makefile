@@ -1,4 +1,4 @@
-CONTAINER ?= docker
+CONTAINER ?= $(shell command -v docker >/dev/null 2>&1 && echo docker || echo podman)
 
 DEV_IMAGE := esp32-streamline-hacs-dev
 LOCK_IMAGE := esp32-streamline-hacs-lock
@@ -11,7 +11,10 @@ TESTS := tests
 TOOLS := tools
 MODELS := $(SOURCE)/models.py
 GENERATED_MODELS := .models.generated.py
-STREAMLINE_REF ?= mainline
+# Firmware v0.6.1 is the compatibility baseline. Advance this immutable commit
+# only when the integration intentionally requires a newer device contract.
+STREAMLINE_CONTRACT_REF := a413b9ac2e75bb6abed6ac8c613025e8dc11ceb4
+STREAMLINE_REF ?= $(STREAMLINE_CONTRACT_REF)
 OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
 VERSION ?= $(shell sed -n 's/^  "version": "\([^"]*\)"/\1/p' $(SOURCE)/manifest.json)
 GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir))
@@ -29,7 +32,8 @@ GIT_CLIFF := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-e HOME=/tmp -w /app $(RELEASE_TOOLS_IMAGE)
 
 define render_models
-	datamodel-codegen --url $(OPENAPI_URL) --input-file-type openapi \
+	python -c "import urllib.request; urllib.request.urlretrieve(\"$(OPENAPI_URL)\", \"$$STREAMLINE_OPENAPI\")" && \
+	datamodel-codegen --input $$STREAMLINE_OPENAPI --input-file-type openapi \
 		--openapi-scopes schemas --output-model-type pydantic_v2.BaseModel \
 		--target-python-version 3.14 --use-standard-collections --use-union-operator \
 		--enum-field-as-literal all --use-annotated --extra-fields ignore \
@@ -40,7 +44,7 @@ define render_models
 	ruff format --config pyproject.toml --line-length 100 $(1)
 endef
 
-.PHONY: actionlint actionlint-image check dev-image format generate generate-check hassfest hassfest-image lint lock lock-check lock-image lock-upgrade quality release release-check release-history release-notes release-notes-check release-prepare release-tools-image test version-check version-prepare
+.PHONY: actionlint actionlint-image check contract-check dev-image format generate generate-check hassfest hassfest-image lint lock lock-check lock-image lock-upgrade quality release release-check release-history release-notes release-notes-check release-prepare release-tools-image test version-check version-prepare
 
 lock-image:
 	$(CONTAINER) build --target lock-tool -t $(LOCK_IMAGE) .
@@ -83,6 +87,8 @@ lint: dev-image
 test: dev-image
 	$(CONTAINER_RUN) sh -c 'python -c "import urllib.request; urllib.request.urlretrieve(\"$(OPENAPI_URL)\", \"$$STREAMLINE_OPENAPI\")" && PYTHONPATH=/workspace pytest -p no:cacheprovider -q'
 
+contract-check: generate-check test
+
 hassfest-image:
 	$(CONTAINER) build -f Dockerfile.hassfest -t $(HASSFEST_IMAGE) .
 
@@ -90,7 +96,7 @@ hassfest: hassfest-image
 	$(CONTAINER) run --rm -v "$(CURDIR):/repo:ro" $(HASSFEST_IMAGE) \
 		--core-path=/tmp --integration-path=/repo/custom_components/streamline
 
-quality: lock-check generate-check lint test actionlint
+quality: lock-check contract-check lint actionlint
 
 check: quality hassfest
 
