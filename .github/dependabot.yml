@@ -8,18 +8,24 @@ multi-ecosystem-groups:
 updates:
   - package-ecosystem: uv
     directory: /
+    commit-message:
+      prefix: build(deps)
     patterns:
       - "*"
     multi-ecosystem-group: integration
 
   - package-ecosystem: docker
     directory: /
+    commit-message:
+      prefix: build(deps)
     patterns:
       - "*"
     multi-ecosystem-group: integration
 
   - package-ecosystem: github-actions
     directory: /
+    commit-message:
+      prefix: ci(deps)
     schedule:
       interval: weekly
     groups:
