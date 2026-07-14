@@ -17,7 +17,7 @@ STREAMLINE_CONTRACT_REF := a413b9ac2e75bb6abed6ac8c613025e8dc11ceb4
 STREAMLINE_REF ?= $(STREAMLINE_CONTRACT_REF)
 OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
 VERSION ?= $(shell sed -n 's/^  "version": "\([^"]*\)"/\1/p' $(SOURCE)/manifest.json)
-GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir))
+GIT_COMMON_DIR = $(abspath $(shell git rev-parse --git-common-dir))
 
 CONTAINER_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/workspace" \
@@ -27,7 +27,7 @@ CONTAINER_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 LOCK_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/workspace" -e UV_CACHE_DIR=/tmp/uv-cache \
 	-w /workspace $(LOCK_IMAGE) uv
-GIT_CLIFF := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
+GIT_CLIFF = $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/app" -v "$(GIT_COMMON_DIR):$(GIT_COMMON_DIR)" \
 	-e HOME=/tmp -w /app $(RELEASE_TOOLS_IMAGE)
 
