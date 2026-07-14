@@ -1,0 +1,69 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This bridge is already configured.",
+      "reauth_successful": "The API token was updated.",
+      "reconfigure_successful": "The bridge settings were updated."
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the bridge. Check the URL and the network.",
+      "invalid_auth": "The bridge rejected this API token.",
+      "invalid_response": "The bridge returned an unexpected response. Update the bridge and this integration to matching versions.",
+      "invalid_url": "Enter an HTTP or HTTPS bridge root URL without a path or query."
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "api_token": "API token"
+        },
+        "description": "The bridge rejected the saved API token. Enter the token configured on the bridge.",
+        "title": "Update the API token"
+      },
+      "reconfigure": {
+        "data": {
+          "api_token": "API token",
+          "bridge_url": "Bridge URL"
+        },
+        "data_description": {
+          "api_token": "API token configured on the bridge. Leave empty for read-only access.",
+          "bridge_url": "Root URL of the bridge HTTP API, for example http://192.0.2.1:8088."
+        },
+        "title": "Reconfigure the StreamLine bridge"
+      },
+      "user": {
+        "data": {
+          "api_token": "API token",
+          "bridge_url": "Bridge URL"
+        },
+        "data_description": {
+          "api_token": "API token configured on the bridge. Leave empty for read-only access.",
+          "bridge_url": "Root URL of the bridge HTTP API, for example http://192.0.2.1:8088."
+        },
+        "title": "Connect to a StreamLine bridge"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "audio_streaming": {
+        "name": "Audio streaming"
+      }
+    },
+    "sensor": {
+      "listeners": {
+        "name": "Listeners"
+      },
+      "lost_packets": {
+        "name": "Lost packets"
+      },
+      "peak_level": {
+        "name": "Peak level"
+      }
+    },
+    "switch": {
+      "recording": {
+        "name": "Recording"
+      }
+    }
+  }
+}
