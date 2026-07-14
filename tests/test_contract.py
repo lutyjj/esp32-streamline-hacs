@@ -53,6 +53,7 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "set_audio_profile": "audio profile authoring stays in the device console",
     "set_audio_profiles": "audio profile authoring stays in the device console",
     "set_board": "board selection stays in the device console",
+    "set_led": "board LED role assignment stays in the device console",
     "set_name": "device identity stays in the device console",
     "set_target": "bridge destination setup stays in the device console",
     "set_transport_mode": "transport encryption requires the coordinated bridge workflow",

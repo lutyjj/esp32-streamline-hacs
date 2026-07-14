@@ -56,7 +56,15 @@ def device_status(
                 "i2c": {"scl": 32, "sda": 33},
                 "i2s": {"bclk": 27, "din": 35, "mclk": 0, "ws": 25},
             },
-            "status_led": {"active_low": True, "gpio": 22},
+            "leds": [
+                {
+                    "id": "status",
+                    "label": "Status LED",
+                    "gpio": 22,
+                    "active_low": True,
+                    "default_role": "status",
+                }
+            ],
         },
         "config_source": "nvs",
         "configuration_writable": writable,
@@ -100,6 +108,21 @@ def device_status(
             "rollback_available": False,
             "rollback_version": "",
         },
+        "system": {
+            "uptime_seconds": 86400,
+            "task_count": 18,
+            "heap": {
+                "free_bytes": 142000,
+                "total_bytes": 300000,
+                "minimum_free_bytes": 120000,
+                "largest_free_block_bytes": 96000,
+            },
+            "nvs": {
+                "used_entries": 210,
+                "available_entries": 420,
+                "total_entries": 630,
+            },
+        },
         "target": {
             "target_host": "bridge.local",
             "target_port": 39000,
@@ -124,6 +147,7 @@ def device_settings(*, schedule: str = "daily") -> dict[str, Any]:
     payload: dict[str, Any] = {
         "adc_attenuation_db": 3,
         "analog_passthrough_enabled": False,
+        "led_roles": [{"id": "status", "role": "status"}],
         "auto_update_schedule": schedule,
         "config_source": "nvs",
         "device_name": "Living Room StreamLine",

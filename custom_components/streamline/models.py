@@ -167,6 +167,16 @@ class FirmwareSettingsRequest(BaseModel):
     auto_update_schedule: AutoUpdateScheduleRequest
 
 
+class HeapStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    free_bytes: Annotated[int, Field(ge=0)]
+    largest_free_block_bytes: Annotated[int, Field(ge=0)]
+    minimum_free_bytes: Annotated[int, Field(ge=0)]
+    total_bytes: Annotated[int, Field(ge=0)]
+
+
 class I2cPins(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -227,6 +237,29 @@ class InputOption(BaseModel):
     line: Annotated[int, Field(ge=0)]
 
 
+class LedRole(RootModel[Literal["off", "on", "status"]]):
+    root: Annotated[
+        Literal["off", "on", "status"],
+        Field(description="The behavior assigned to a single board LED."),
+    ]
+
+
+class LedRoleStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    id: str
+    role: LedRole
+
+
+class LedSettingsRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    id: str
+    role: LedRole
+
+
 class MetricsStatus(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -256,6 +289,15 @@ class NameSettingsRequest(BaseModel):
         extra="ignore",
     )
     name: Annotated[str | None, Field(max_length=32)] = None
+
+
+class NvsStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    available_entries: Annotated[int, Field(ge=0)]
+    total_entries: Annotated[int, Field(ge=0)]
+    used_entries: Annotated[int, Field(ge=0)]
 
 
 class OtaStatus(BaseModel):
@@ -305,22 +347,14 @@ class Severity(RootModel[Literal["ok", "info", "blocking"]]):
     ]
 
 
-class StatusLed(BaseModel):
+class SystemStatus(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
     )
-    active_low: Annotated[
-        bool | None, Field(description="`true` when driving the GPIO low lights the LED.")
-    ] = None
-    gpio: Annotated[int, Field(ge=0)]
-
-
-class StatusLedStatus(BaseModel):
-    model_config = ConfigDict(
-        extra="ignore",
-    )
-    active_low: bool
-    gpio: Annotated[int, Field(ge=0)]
+    heap: HeapStatus
+    nvs: NvsStatus
+    task_count: Annotated[int, Field(ge=0)]
+    uptime_seconds: Annotated[int, Field(ge=0)]
 
 
 class TargetSettingsRequest(BaseModel):
@@ -438,58 +472,6 @@ class AudioProfileCatalog(BaseModel):
     schema_version: Annotated[int, Field(ge=0)]
 
 
-class Board(BaseModel):
-    model_config = ConfigDict(
-        extra="ignore",
-    )
-    adc_atten_max_db: Annotated[
-        int, Field(description="Upper bound of the ADC attenuation control, in dB.", ge=0)
-    ]
-    analog_passthrough: AnalogPassthroughCapability | None = None
-    codec: Annotated[
-        CodecSpec,
-        Field(description="Codec driver and bus address needed to control line-in capture."),
-    ]
-    id: Annotated[
-        str,
-        Field(
-            description="Stable descriptor id. Official presets and custom boards share this\nidentity shape."
-        ),
-    ]
-    input_gain_max: Annotated[
-        int,
-        Field(description="Upper bound of the input gain control, as a 0..=100 percentage.", ge=0),
-    ]
-    input_lines: Annotated[
-        list[InputOption],
-        Field(
-            description="Selectable inputs in console order, never empty; the first entry is\nthe factory default."
-        ),
-    ]
-    name: Annotated[
-        str, Field(description="Human-readable board name, advertised in `/api/status`.")
-    ]
-    pins: Annotated[
-        PinMap, Field(description="ESP32 GPIO wiring for codec control and I2S capture.")
-    ]
-    status_led: StatusLed | None = None
-
-
-class CapabilitiesStatus(BaseModel):
-    model_config = ConfigDict(
-        extra="ignore",
-    )
-    adc_atten_max_db: Annotated[int, Field(ge=0)]
-    analog_passthrough: AnalogPassthroughCapabilityStatus | None = None
-    board: str
-    board_id: str
-    codec: CodecStatus
-    input_gain_max: Annotated[int, Field(ge=0)]
-    input_lines: list[InputLineStatus]
-    pins: PinMapStatus
-    status_led: StatusLedStatus | None = None
-
-
 class ConfigResponse(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -501,6 +483,10 @@ class ConfigResponse(BaseModel):
     device_name: str
     input_gain: Annotated[int, Field(ge=0)]
     input_line: Annotated[int, Field(ge=0)]
+    led_roles: Annotated[
+        list[LedRoleStatus],
+        Field(description="The effective role of every board LED, in descriptor order."),
+    ]
     ssid: str
     target_host: str
     target_port: Annotated[int, Field(ge=0)]
@@ -536,6 +522,97 @@ class HealthReport(BaseModel):
     status: Severity
 
 
+class Led(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    active_low: Annotated[
+        bool | None, Field(description="`true` when driving the GPIO low lights the LED.")
+    ] = None
+    default_role: Annotated[
+        LedRole | None,
+        Field(
+            description="Role applied until the user assigns another, so a board author can wire a\nstatus light while leaving decorative LEDs dark."
+        ),
+    ] = None
+    gpio: Annotated[int, Field(ge=0)]
+    id: Annotated[
+        str,
+        Field(
+            description="Stable id, unique within the board, used to address the LED in settings."
+        ),
+    ]
+    label: Annotated[str, Field(description="Human-readable name the console shows for this LED.")]
+
+
+class LedCapabilityStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    active_low: bool
+    default_role: LedRole
+    gpio: Annotated[int, Field(ge=0)]
+    id: str
+    label: str
+
+
+class Board(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    adc_atten_max_db: Annotated[
+        int, Field(description="Upper bound of the ADC attenuation control, in dB.", ge=0)
+    ]
+    analog_passthrough: AnalogPassthroughCapability | None = None
+    codec: Annotated[
+        CodecSpec,
+        Field(description="Codec driver and bus address needed to control line-in capture."),
+    ]
+    id: Annotated[
+        str,
+        Field(
+            description="Stable descriptor id. Official presets and custom boards share this\nidentity shape."
+        ),
+    ]
+    input_gain_max: Annotated[
+        int,
+        Field(description="Upper bound of the input gain control, as a 0..=100 percentage.", ge=0),
+    ]
+    input_lines: Annotated[
+        list[InputOption],
+        Field(
+            description="Selectable inputs in console order, never empty; the first entry is\nthe factory default."
+        ),
+    ]
+    leds: Annotated[
+        list[Led] | None,
+        Field(
+            description="Board LEDs the user can assign roles to, in console order. Empty when the\nboard wires none."
+        ),
+    ] = None
+    name: Annotated[
+        str, Field(description="Human-readable board name, advertised in `/api/status`.")
+    ]
+    pins: Annotated[
+        PinMap, Field(description="ESP32 GPIO wiring for codec control and I2S capture.")
+    ]
+
+
+class CapabilitiesStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    adc_atten_max_db: Annotated[int, Field(ge=0)]
+    analog_passthrough: AnalogPassthroughCapabilityStatus | None = None
+    board: str
+    board_id: str
+    codec: CodecStatus
+    input_gain_max: Annotated[int, Field(ge=0)]
+    input_lines: list[InputLineStatus]
+    leds: list[LedCapabilityStatus]
+    pins: PinMapStatus
+
+
 class StatusResponse(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -554,6 +631,7 @@ class StatusResponse(BaseModel):
     metrics: MetricsStatus
     mode: str
     ota: OtaStatus
+    system: SystemStatus
     target: TargetStatus
     web_server: bool
     wifi: WifiStatus
