@@ -19,12 +19,17 @@ from .models import (
     Ack,
     AnalogPassthroughSettingsRequest,
     AudioSettingsRequest,
+    AutoUpdateScheduleRequest,
+    ConfigResponse,
     ErrorResponse,
+    FirmwareSettingsRequest,
     StatusResponse,
 )
 
 if TYPE_CHECKING:
     from aiohttp import ClientResponse, ClientSession
+
+    from .const import UpdateSchedule
 
 REQUEST_TIMEOUT = ClientTimeout(total=10)
 
@@ -56,6 +61,10 @@ class StreamLineDeviceClient:
         """Read device status, metrics, and capabilities."""
         return await self._request("GET", "/api/status", StatusResponse)
 
+    async def async_get_settings(self) -> ConfigResponse:
+        """Read persisted device settings."""
+        return await self._request("GET", "/api/settings", ConfigResponse)
+
     async def async_unlock(self) -> Ack:
         """Validate the configured device admin key."""
         return await self._request("POST", "/api/unlock", Ack, authenticated=True)
@@ -85,6 +94,26 @@ class StreamLineDeviceClient:
             authenticated=True,
             form=AnalogPassthroughSettingsRequest(enabled=enabled),
         )
+
+    async def async_set_update_schedule(self, schedule: UpdateSchedule) -> Ack:
+        """Set the device's automatic firmware update schedule."""
+        return await self._request(
+            "POST",
+            "/api/settings/firmware",
+            Ack,
+            authenticated=True,
+            form=FirmwareSettingsRequest(
+                auto_update_schedule=AutoUpdateScheduleRequest(root=schedule)
+            ),
+        )
+
+    async def async_check_firmware_update(self) -> Ack:
+        """Ask the device to check its firmware release source."""
+        return await self._request("POST", "/api/ota/check", Ack, authenticated=True)
+
+    async def async_install_firmware_update(self) -> Ack:
+        """Ask the device to install its latest firmware release."""
+        return await self._request("POST", "/api/ota/update", Ack, authenticated=True)
 
     async def _request[ModelT: BaseModel](
         self,

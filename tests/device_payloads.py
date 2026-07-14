@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from custom_components.streamline.models import ErrorResponse, StatusResponse
+from custom_components.streamline.models import ConfigResponse, ErrorResponse, StatusResponse
 
 DEVICE_URL = "http://device.local"
 
@@ -17,6 +17,11 @@ def device_status(
     writable: bool = True,
     passthrough_capable: bool = True,
     passthrough_enabled: bool = False,
+    latest_version: str = "",
+    ota_busy: bool = False,
+    ota_phase: str = "idle",
+    transport: str = "cleartext",
+    last_ota: str = "",
 ) -> dict[str, Any]:
     """Return one complete device status payload."""
     payload: dict[str, Any] = {
@@ -58,7 +63,7 @@ def device_status(
         "device_name": "Living Room StreamLine",
         "diagnostics": {
             "last_fallback": "",
-            "last_ota": "",
+            "last_ota": last_ota,
             "reset_reason": "software",
         },
         "firmware_version": "0.6.1",
@@ -86,19 +91,19 @@ def device_status(
         },
         "mode": "provisioned",
         "ota": {
-            "busy": False,
+            "busy": ota_busy,
             "bytes_total": 0,
             "bytes_written": 0,
-            "latest_version": "",
+            "latest_version": latest_version,
             "message": "",
-            "phase": "idle",
+            "phase": ota_phase,
             "rollback_available": False,
             "rollback_version": "",
         },
         "target": {
             "target_host": "bridge.local",
             "target_port": 39000,
-            "transport": "cleartext",
+            "transport": transport,
         },
         "web_server": True,
         "wifi": {
@@ -111,6 +116,32 @@ def device_status(
         },
     }
     StatusResponse.model_validate(payload)
+    return payload
+
+
+def device_settings(*, schedule: str = "daily") -> dict[str, Any]:
+    """Return one complete persisted settings payload."""
+    payload: dict[str, Any] = {
+        "adc_attenuation_db": 3,
+        "analog_passthrough_enabled": False,
+        "auto_update_schedule": schedule,
+        "config_source": "nvs",
+        "device_name": "Living Room StreamLine",
+        "input_gain": 25,
+        "input_line": 2,
+        "ssid": "example-network",
+        "target_host": "bridge.local",
+        "target_port": 39000,
+        "transport": {
+            "active_key_id": None,
+            "contract_version": 1,
+            "mode": "cleartext",
+            "pending_key_id": None,
+            "pending_verified": False,
+            "rollback_key_id": None,
+        },
+    }
+    ConfigResponse.model_validate(payload)
     return payload
 
 

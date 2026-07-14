@@ -43,12 +43,12 @@ class StreamLineInputGain(StreamLineWritableEntity, NumberEntity):
     @property
     def native_value(self) -> float:
         """Return the active input gain."""
-        return self.coordinator.data.audio.input_gain
+        return self.coordinator.status.audio.input_gain
 
     @property
     def native_max_value(self) -> float:
         """Return the selected board's gain limit."""
-        return self.coordinator.data.capabilities.input_gain_max
+        return self.coordinator.status.capabilities.input_gain_max
 
     async def async_set_native_value(self, value: float) -> None:
         """Set input gain while preserving the other audio controls."""
@@ -74,12 +74,12 @@ class StreamLineAdcAttenuation(StreamLineWritableEntity, NumberEntity):
     @property
     def native_value(self) -> float:
         """Return the active ADC attenuation."""
-        return self.coordinator.data.audio.adc_attenuation_db
+        return self.coordinator.status.audio.adc_attenuation_db
 
     @property
     def native_max_value(self) -> float:
         """Return the selected board's attenuation limit."""
-        return self.coordinator.data.capabilities.adc_atten_max_db
+        return self.coordinator.status.capabilities.adc_atten_max_db
 
     async def async_set_native_value(self, value: float) -> None:
         """Set ADC attenuation while preserving the other audio controls."""

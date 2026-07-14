@@ -27,7 +27,7 @@ class StreamLineEntity(CoordinatorEntity[StreamLineCoordinator]):
     @property
     def device_info(self) -> DeviceInfo:
         """Describe the physical StreamLine device."""
-        status = self.coordinator.data
+        status = self.coordinator.status
         return DeviceInfo(
             configuration_url=self.coordinator.client.device_url,
             identifiers={(DOMAIN, self._device_identifier)},
@@ -47,5 +47,5 @@ class StreamLineWritableEntity(StreamLineEntity):
         return (
             super().available
             and self.coordinator.client.has_admin_key
-            and self.coordinator.data.configuration_writable
+            and self.coordinator.status.configuration_writable
         )

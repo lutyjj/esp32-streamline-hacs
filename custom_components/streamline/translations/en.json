@@ -58,6 +58,14 @@
       }
     },
     "select": {
+      "automatic_update_schedule": {
+        "name": "Automatic update schedule",
+        "state": {
+          "daily": "Daily",
+          "disabled": "Disabled",
+          "weekly": "Weekly"
+        }
+      },
       "input": {
         "name": "Input"
       }
@@ -70,6 +78,31 @@
           "info": "Info",
           "ok": "OK"
         }
+      },
+      "ota_status": {
+        "name": "OTA status",
+        "state": {
+          "checking": "Checking",
+          "downloading": "Downloading",
+          "failed": "Failed",
+          "idle": "Idle",
+          "installed": "Installed",
+          "unknown": "Unknown",
+          "up-to-date": "Up to date",
+          "update-available": "Update available",
+          "verifying": "Verifying"
+        }
+      },
+      "pcm_encryption": {
+        "name": "PCM encryption",
+        "state": {
+          "disabled": "Disabled",
+          "enabled": "Enabled",
+          "unknown": "Unknown"
+        }
+      },
+      "reset_reason": {
+        "name": "Reset reason"
       },
       "network_errors": {
         "name": "Network errors"
@@ -84,6 +117,11 @@
     "switch": {
       "analog_passthrough": {
         "name": "Analog passthrough"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   }

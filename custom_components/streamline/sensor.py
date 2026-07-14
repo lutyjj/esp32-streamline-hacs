@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -16,7 +16,7 @@ from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, 
 from .entity import StreamLineEntity
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -25,6 +25,30 @@ if TYPE_CHECKING:
     from .models import StatusResponse
 
 PEAK_FULL_SCALE = 32768
+OTA_PHASES = (
+    "idle",
+    "checking",
+    "up-to-date",
+    "update-available",
+    "downloading",
+    "verifying",
+    "installed",
+    "failed",
+)
+
+
+def _pcm_encryption_state(status: StatusResponse) -> str:
+    """Map known transport modes without reporting an unknown mode as cleartext."""
+    if status.target.transport == "tls-psk":
+        return "enabled"
+    if status.target.transport == "cleartext":
+        return "disabled"
+    return "unknown"
+
+
+def _ota_phase(status: StatusResponse) -> str:
+    """Keep a future device phase inside the entity's declared enum."""
+    return status.ota.phase if status.ota.phase in OTA_PHASES else "unknown"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -32,6 +56,7 @@ class StreamLineSensorDescription(SensorEntityDescription):
     """Describe one value read from device status."""
 
     value_fn: Callable[[StatusResponse], str | int | float]
+    attributes_fn: Callable[[StatusResponse], Mapping[str, Any]] | None = None
 
 
 SENSORS: tuple[StreamLineSensorDescription, ...] = (
@@ -63,6 +88,38 @@ SENSORS: tuple[StreamLineSensorDescription, ...] = (
         options=["ok", "info", "blocking"],
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda status: status.health.status.root,
+    ),
+    StreamLineSensorDescription(
+        key="pcm_encryption",
+        translation_key="pcm_encryption",
+        device_class=SensorDeviceClass.ENUM,
+        options=["disabled", "enabled", "unknown"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_pcm_encryption_state,
+    ),
+    StreamLineSensorDescription(
+        key="ota_status",
+        translation_key="ota_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=[*OTA_PHASES, "unknown"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_ota_phase,
+        attributes_fn=lambda status: {
+            "message": status.ota.message or None,
+            "last_attempt": status.diagnostics.last_ota or None,
+            "rollback_available": status.ota.rollback_available,
+            "rollback_version": status.ota.rollback_version or None,
+        },
+    ),
+    StreamLineSensorDescription(
+        key="reset_reason",
+        translation_key="reset_reason",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda status: status.diagnostics.reset_reason,
+        attributes_fn=lambda status: {
+            "last_setup_fallback": status.diagnostics.last_fallback or None,
+        },
     ),
     StreamLineSensorDescription(
         key="network_errors",
@@ -98,4 +155,11 @@ class StreamLineSensor(StreamLineEntity, SensorEntity):
     @property
     def native_value(self) -> str | int | float:
         """Return the current value without I/O."""
-        return self.entity_description.value_fn(self.coordinator.data)
+        return self.entity_description.value_fn(self.coordinator.status)
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        """Return stable diagnostic details when this sensor defines them."""
+        if self.entity_description.attributes_fn is None:
+            return None
+        return self.entity_description.attributes_fn(self.coordinator.status)

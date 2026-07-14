@@ -18,7 +18,7 @@ from custom_components.streamline.errors import (
     StreamLineCannotConnect,
 )
 
-from .device_payloads import DEVICE_URL, device_status, error_response
+from .device_payloads import DEVICE_URL, device_settings, device_status, error_response
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -65,6 +65,27 @@ async def test_passthrough_boolean_is_lowercase_form_value(
     await client(hass, ADMIN_KEY).async_set_analog_passthrough(True)
 
     assert aioclient_mock.mock_calls[0][2] == {"enabled": "true"}
+
+
+async def test_update_operations_use_generated_forms_and_bearer_key(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=device_settings())
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/firmware", json={"ok": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/ota/check", status=202, json={"started": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/ota/update", status=202, json={"started": True})
+
+    device = client(hass, ADMIN_KEY)
+    settings = await device.async_get_settings()
+    await device.async_set_update_schedule("weekly")
+    await device.async_check_firmware_update()
+    await device.async_install_firmware_update()
+
+    assert settings.auto_update_schedule.root == "daily"
+    assert aioclient_mock.mock_calls[1][2] == {"auto_update_schedule": "weekly"}
+    assert all(
+        call[3]["Authorization"] == f"Bearer {ADMIN_KEY}" for call in aioclient_mock.mock_calls[1:]
+    )
 
 
 async def test_authenticated_call_without_key_fails_before_request(
@@ -138,17 +159,29 @@ async def test_every_client_operation_matches_openapi_contract(
 ) -> None:
     """Pin hand-written method, path, and authentication facts to OpenAPI."""
     aioclient_mock.get(f"{DEVICE_URL}/api/status", json=device_status())
+    aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=device_settings())
     aioclient_mock.post(f"{DEVICE_URL}/api/unlock", json={"ok": True})
     aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
     aioclient_mock.post(f"{DEVICE_URL}/api/settings/analog-passthrough", json={"ok": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/firmware", json={"ok": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/ota/check", status=202, json={"started": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/ota/update", status=202, json={"started": True})
 
     device = client(hass, ADMIN_KEY)
     await device.async_get_status()
+    await device.async_get_settings()
     await device.async_unlock()
     await device.async_set_audio(2, 25, 3)
     await device.async_set_analog_passthrough(True)
+    await device.async_set_update_schedule("weekly")
+    await device.async_check_firmware_update()
+    await device.async_install_firmware_update()
     exercised = {
+        "async_check_firmware_update",
+        "async_get_settings",
         "async_get_status",
+        "async_install_firmware_update",
+        "async_set_update_schedule",
         "async_unlock",
         "async_set_audio",
         "async_set_analog_passthrough",

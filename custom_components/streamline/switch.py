@@ -24,7 +24,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Add analog passthrough when the selected board supports it."""
-    if entry.runtime_data.data.capabilities.analog_passthrough is not None:
+    if entry.runtime_data.status.capabilities.analog_passthrough is not None:
         async_add_entities([StreamLineAnalogPassthroughSwitch(entry)])
 
 
@@ -40,7 +40,7 @@ class StreamLineAnalogPassthroughSwitch(StreamLineWritableEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return the configured passthrough state."""
-        return self.coordinator.data.analog_passthrough.enabled
+        return self.coordinator.status.analog_passthrough.enabled
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable local analog passthrough."""

@@ -36,4 +36,4 @@ class StreamLinePlayingSensor(StreamLineEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return the device's signal-gate state."""
-        return self.coordinator.data.metrics.playing
+        return self.coordinator.status.metrics.playing
