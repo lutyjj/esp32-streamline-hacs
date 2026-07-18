@@ -4,13 +4,12 @@ DEV_IMAGE := esp32-streamline-hacs-dev
 LOCK_IMAGE := esp32-streamline-hacs-lock
 HASSFEST_IMAGE := esp32-streamline-hacs-hassfest
 ACTIONLINT_IMAGE := esp32-streamline-hacs-actionlint
-RELEASE_TOOLS_IMAGE := esp32-streamline-hacs-release-tools
 
 SOURCE := custom_components/streamline
 TESTS := tests
-TOOLS := tools
 MODELS := $(SOURCE)/models.py
 GENERATED_MODELS := .models.generated.py
+MANIFEST := $(SOURCE)/manifest.json
 # The current StreamLine mainline device contract is the compatibility baseline
 # (post-0.6.1: device resource telemetry, board LED roles, and the canonical
 # example device the test payloads derive from). Advance this immutable commit
@@ -18,8 +17,10 @@ GENERATED_MODELS := .models.generated.py
 STREAMLINE_CONTRACT_REF := 952057de135220fb89decdc370ba89fd2b9a1c2a
 STREAMLINE_REF ?= $(STREAMLINE_CONTRACT_REF)
 OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
-VERSION ?= $(shell sed -n 's/^  "version": "\([^"]*\)"/\1/p' $(SOURCE)/manifest.json)
-GIT_COMMON_DIR = $(abspath $(shell git rev-parse --git-common-dir))
+# release-please owns the version in manifest.json; version-check gates a
+# published tree against it.
+MANIFEST_VERSION := $(shell sed -n 's/^[[:space:]]*"version": "\([^"]*\)".*/\1/p' $(MANIFEST))
+VERSION ?= $(MANIFEST_VERSION)
 
 CONTAINER_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/workspace" \
@@ -29,9 +30,6 @@ CONTAINER_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 LOCK_RUN := $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 	-v "$(CURDIR):/workspace" -e UV_CACHE_DIR=/tmp/uv-cache \
 	-w /workspace $(LOCK_IMAGE) uv
-GIT_CLIFF = $(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
-	-v "$(CURDIR):/app" -v "$(GIT_COMMON_DIR):$(GIT_COMMON_DIR)" \
-	-e HOME=/tmp -w /app $(RELEASE_TOOLS_IMAGE)
 
 define render_models
 	python -c "import urllib.request; urllib.request.urlretrieve(\"$(OPENAPI_URL)\", \"$$STREAMLINE_OPENAPI\")" && \
@@ -46,7 +44,7 @@ define render_models
 	ruff format --config pyproject.toml --line-length 100 $(1)
 endef
 
-.PHONY: actionlint actionlint-image check contract-check dev-image format generate generate-check hassfest hassfest-image lint lock lock-check lock-image lock-upgrade quality release release-check release-history release-notes release-notes-check release-prepare release-tools-image test version-check version-prepare
+.PHONY: actionlint actionlint-image check contract-check dev-image format generate generate-check hassfest hassfest-image lint lock lock-check lock-image lock-upgrade quality test version-check
 
 lock-image:
 	$(CONTAINER) build --target lock-tool -t $(LOCK_IMAGE) .
@@ -70,9 +68,6 @@ actionlint: actionlint-image
 	$(CONTAINER) run --rm --user "$(shell id -u):$(shell id -g)" \
 		-v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT_IMAGE) -color
 
-release-tools-image:
-	$(CONTAINER) build -f Dockerfile.release-tools -t $(RELEASE_TOOLS_IMAGE) .
-
 generate: dev-image
 	$(CONTAINER_RUN) sh -c '$(call render_models,$(MODELS))'
 
@@ -81,10 +76,10 @@ generate-check: dev-image
 		$(call render_models,$(GENERATED_MODELS)) && diff -u $(MODELS) $(GENERATED_MODELS)'
 
 format: dev-image
-	$(CONTAINER_RUN) sh -c 'ruff check --select I --fix $(SOURCE) $(TESTS) $(TOOLS) && ruff format $(SOURCE) $(TESTS) $(TOOLS)'
+	$(CONTAINER_RUN) sh -c 'ruff check --select I --fix $(SOURCE) $(TESTS) && ruff format $(SOURCE) $(TESTS)'
 
 lint: dev-image
-	$(CONTAINER_RUN) sh -c 'ruff format --check $(SOURCE) $(TESTS) $(TOOLS) && ruff check $(SOURCE) $(TESTS) $(TOOLS) && mypy $(SOURCE) $(TESTS) $(TOOLS)'
+	$(CONTAINER_RUN) sh -c 'ruff format --check $(SOURCE) $(TESTS) && ruff check $(SOURCE) $(TESTS) && mypy $(SOURCE) $(TESTS)'
 
 test: dev-image
 	$(CONTAINER_RUN) sh -c 'python -c "import urllib.request; urllib.request.urlretrieve(\"$(OPENAPI_URL)\", \"$$STREAMLINE_OPENAPI\")" && PYTHONPATH=/workspace pytest -p no:cacheprovider -q'
@@ -102,35 +97,9 @@ quality: lock-check contract-check lint actionlint
 
 check: quality hassfest
 
-release-history:
-	@remote="$$(git remote | sed -n '1p')"; \
-		test -n "$$remote" || { echo "a git remote is required for release history" >&2; exit 2; }; \
-		git fetch --quiet --force --prune --prune-tags "$$remote" '+refs/tags/*:refs/tags/*'
-
-version-prepare: dev-image
-	$(CONTAINER_RUN) python -m tools.release prepare "$(VERSION)"
-
-version-check: dev-image
-	$(CONTAINER_RUN) python -m tools.release check "$(VERSION)"
-
-release-notes: release-history
-	@$(MAKE) --no-print-directory version-check VERSION=$(VERSION) 1>&2
-	@$(MAKE) --no-print-directory release-tools-image 1>&2
-	@$(GIT_CLIFF) --unreleased --tag "v$(VERSION)" --strip all
-
-release-notes-check:
-	@notes="$$( $(MAKE) --no-print-directory release-notes VERSION=$(VERSION) )"; \
-		test -n "$$(printf '%s' "$$notes" | tr -d '[:space:]')" || { \
-			echo "release notes contain no user-facing changes" >&2; exit 2; \
-		}
-
-release-prepare:
-	@test -z "$$(git status --porcelain)" || { echo "release preparation requires a clean worktree" >&2; exit 2; }
-	$(MAKE) version-prepare VERSION=$(VERSION)
-	$(MAKE) version-check VERSION=$(VERSION)
-	$(MAKE) release-notes-check VERSION=$(VERSION)
-
-release-check: version-check release-notes-check check
-
-release: release-prepare
-	$(MAKE) release-check VERSION=$(VERSION)
+# release-please bumps manifest.json and the changelog; this gate proves a
+# tagged tree carries the version the release publishes.
+version-check:
+	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }
+	@printf '%s' "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "VERSION must be a stable X.Y.Z release version" >&2; exit 2; }
+	@test "$(VERSION)" = "$(MANIFEST_VERSION)" || { echo "VERSION=$(VERSION) does not match $(MANIFEST) ($(MANIFEST_VERSION))" >&2; exit 2; }
