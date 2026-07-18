@@ -83,16 +83,18 @@ either repository.
 
 ## Release
 
-Run the **Release** GitHub Actions workflow with a stable `X.Y.Z` version. The
-workflow updates `manifest.json` directly on `mainline`, verifies the exact
-commit, creates the `vX.Y.Z` tag, publishes a GitHub Release, and validates the
-published release with HACS.
+[release-please](https://github.com/googleapis/release-please) maintains a
+release PR from the Conventional Commits on `mainline`. It bumps the
+`manifest.json` version and prepends `CHANGELOG.md`; merging the PR creates the
+`vX.Y.Z` tag and a draft GitHub Release. Publication then verifies the tagged
+tree, publishes the release, and validates it with HACS. Land a Conventional
+Commit and let the release PR carry the version, never edit `manifest.json` or
+`CHANGELOG.md` by hand.
 
-HACS uses the manifest version and published GitHub tags for updates. The
-GitHub Release body is the update announcement shown in Home Assistant. It is
-generated from user-facing Conventional Commits (`feat`, `fix`, and `perf`);
-maintenance commits stay out of the announcement. The repository does not
-duplicate those notes in a `CHANGELOG.md`.
+HACS reads the manifest version and published GitHub tags for updates, and
+shows the GitHub Release body as the update announcement in Home Assistant. That
+body lists user-facing changes (`feat`, `fix`, `perf`); maintenance, CI, and
+dependency commits stay out.
 
 ## License
 
