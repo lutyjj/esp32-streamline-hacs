@@ -3,9 +3,9 @@ name: Release
 # Publishes the draft release that Release Please created at the tag. Order is
 # what makes an interrupted run safe to redispatch at the same tag: resolve the
 # release commit from the draft, verify the tagged tree carries the tag's
-# version, publish the draft as the release, then validate the published
-# release with HACS. Reruns converge — an already-published release is left
-# untouched.
+# version and passes quality plus Hassfest, publish the draft as the release,
+# then validate the published release with HACS. Reruns converge — an
+# already-published release is left untouched.
 on:
   workflow_call:
     inputs:
@@ -54,8 +54,14 @@ jobs:
         with:
           ref: ${{ steps.commit.outputs.sha }}
 
-      - name: Verify the tagged tree carries the tag's version
-        run: make version-check VERSION="${TAG#v}"
+      # Re-verify the exact release commit here instead of trusting the release
+      # PR's CI: those checks can be skipped with the default token, and a
+      # GITHUB_TOKEN merge would not trigger the push-based quality workflows on
+      # this SHA.
+      - name: Verify the tagged tree
+        run: |
+          make version-check VERSION="${TAG#v}"
+          make check
 
       # A release older than the published latest must not steal the `latest`
       # marker.
