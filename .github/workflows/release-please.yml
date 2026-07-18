@@ -1,0 +1,46 @@
+name: Release Please
+
+# Maintains the release PR from the Conventional Commits on mainline: it bumps
+# custom_components/streamline/manifest.json per release-please-config.json and
+# prepends CHANGELOG.md. Merging the PR creates the vX.Y.Z tag and a draft
+# GitHub release, then the chained publish job verifies and publishes it and
+# HACS validates the published release. Chained here because a tag or release
+# created with GITHUB_TOKEN cannot trigger the publish workflow through its own
+# events.
+on:
+  push:
+    branches: [mainline]
+  # Manual refresh for the release PR, e.g. after branch-protection reports it
+  # behind a mainline that carried no releasable commits.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # With the default token, CI on the release PR waits for a manual
+      # "Approve and run"; set a RELEASE_PLEASE_TOKEN fine-grained PAT to make
+      # it start on its own.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+
+  publish:
+    name: Publish
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

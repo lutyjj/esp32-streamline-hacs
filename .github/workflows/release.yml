@@ -1,136 +1,89 @@
 name: Release
 
+# Publishes the draft release that Release Please created at the tag. Order is
+# what makes an interrupted run safe to redispatch at the same tag: resolve the
+# release commit from the draft, verify the tagged tree carries the tag's
+# version, publish the draft as the release, then validate the published
+# release with HACS. Reruns converge — an already-published release is left
+# untouched.
 on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
-      version:
-        description: Stable version without the v prefix
+      tag:
+        description: Release tag (vX.Y.Z)
         required: true
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
-  group: release
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
-  prepare:
-    name: Prepare mainline
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ inputs.version }}
-    outputs:
-      sha: ${{ steps.commit.outputs.sha }}
-    steps:
-      - name: Check out mainline
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: mainline
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Confirm the version is available
-        run: |
-          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Version must be a stable X.Y.Z value."
-            exit 1
-          fi
-          if git rev-parse --verify --quiet "refs/tags/v$VERSION"; then
-            echo "::error::v$VERSION already exists."
-            exit 1
-          fi
-          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::GitHub release v$VERSION already exists."
-            exit 1
-          fi
-
-      - name: Prepare release metadata
-        run: make release-prepare VERSION="$VERSION"
-
-      - name: Commit directly to mainline
-        id: commit
-        run: |
-          initial_sha=$(git rev-parse HEAD)
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add custom_components/streamline/manifest.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(release): release $VERSION"
-          fi
-          git fetch --quiet origin mainline
-          test "$(git rev-parse origin/mainline)" = "$initial_sha" || {
-            echo "::error::mainline advanced during release preparation; run the workflow again."
-            exit 1
-          }
-          if test "$(git rev-parse HEAD)" != "$initial_sha"; then
-            git push origin HEAD:mainline
-          fi
-          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-  verify:
-    name: Verify release commit
-    needs: prepare
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      VERSION: ${{ inputs.version }}
-    steps:
-      - name: Check out prepared commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Run the complete release check
-        run: make release-check VERSION="$VERSION"
-
   publish:
     name: Publish GitHub release
-    needs: [prepare, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
+      TAG: ${{ inputs.tag }}
       GH_TOKEN: ${{ github.token }}
-      RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
-      VERSION: ${{ inputs.version }}
+      GH_REPO: ${{ github.repository }}
+    outputs:
+      latest: ${{ steps.release-state.outputs.latest }}
     steps:
-      - name: Check out verified commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # A draft release holds only the intended tag name — GitHub creates the
+      # tag ref when the release is published. The release record stores the
+      # exact commit in both states, so read it from there and require a full
+      # SHA rather than risking a branch-name checkout.
+      - name: Resolve the release commit
+        id: commit
+        run: |
+          sha="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish)"
+          echo "$sha" | grep -Eq '^[0-9a-f]{40}$'
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ needs.prepare.outputs.sha }}
-          fetch-depth: 0
-          fetch-tags: true
+          ref: ${{ steps.commit.outputs.sha }}
 
-      - name: Confirm mainline still points to the verified commit
+      - name: Verify the tagged tree carries the tag's version
+        run: make version-check VERSION="${TAG#v}"
+
+      # A release older than the published latest must not steal the `latest`
+      # marker.
+      - name: Decide whether this tag becomes latest
+        id: release-state
         run: |
-          git fetch --quiet origin mainline
-          test "$(git rev-parse origin/mainline)" = "$RELEASE_SHA" || {
-            echo "::error::mainline advanced after verification; run the workflow again."
-            exit 1
-          }
+          current="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          latest=false
+          if [ "$(printf '%s\n%s\n' "$current" "$TAG" | sort -V | tail -1)" = "$TAG" ]; then latest=true; fi
+          printf 'latest=%s\n' "$latest" >> "$GITHUB_OUTPUT"
 
-      - name: Render the HACS update announcement
+      # The commit point: publishing the draft creates the tag ref and locks the
+      # release. A rerun that finds the release already published leaves it
+      # untouched.
+      - name: Publish the release
+        env:
+          LATEST: ${{ steps.release-state.outputs.latest }}
         run: |
-          make --no-print-directory release-notes VERSION="$VERSION" > "$RUNNER_TEMP/release-notes.md"
-          test -s "$RUNNER_TEMP/release-notes.md"
-
-      - name: Create the tag and published release
-        run: >-
-          gh release create "v$VERSION"
-          --repo "$GITHUB_REPOSITORY"
-          --target "$RELEASE_SHA"
-          --title "v$VERSION"
-          --notes-file "$RUNNER_TEMP/release-notes.md"
-          --fail-on-no-commits
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ]; then
+            gh release edit "$TAG" --draft=false --latest="$LATEST"
+          else
+            echo "release $TAG is already published"
+          fi
 
   validate-release:
     name: Validate published HACS release
     needs: publish
+    if: ${{ needs.publish.outputs.latest == 'true' }}
     runs-on: ubuntu-latest
     permissions: {}
     steps:
