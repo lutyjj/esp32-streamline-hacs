@@ -1,16 +1,31 @@
-"""Current device payloads, each checked against its generated model."""
+"""Device payloads derived from the contract's canonical example device.
+
+The pinned artifact's ``StatusResponse`` and ``ConfigResponse`` schema
+examples are the base state; the keyword arguments express the scenarios
+tests drive. Every payload is validated against its generated model, so a
+payload can only break when the contract itself changed.
+"""
 
 from __future__ import annotations
 
+import copy
+import json
+import os
+from pathlib import Path
 from typing import Any
 
 from custom_components.streamline.models import ConfigResponse, ErrorResponse, StatusResponse
 
 DEVICE_URL = "http://device.local"
 
+_SCHEMAS = json.loads(Path(os.environ["STREAMLINE_OPENAPI"]).read_text())["components"]["schemas"]
+_STATUS_EXAMPLE: dict[str, Any] = _SCHEMAS["StatusResponse"]["example"]
+_CONFIG_EXAMPLE: dict[str, Any] = _SCHEMAS["ConfigResponse"]["example"]
+
 
 def device_status(
     *,
+    name: str = "Living Room StreamLine",
     playing: bool = True,
     peak: int = 16384,
     admin_required: bool = True,
@@ -24,147 +39,36 @@ def device_status(
     last_ota: str = "",
 ) -> dict[str, Any]:
     """Return one complete device status payload."""
-    payload: dict[str, Any] = {
-        "analog_passthrough": {
-            "active": passthrough_enabled,
-            "enabled": passthrough_enabled,
-            "fault": None,
-        },
-        "audio": {
-            "adc_attenuation_db": 3,
-            "bits_per_sample": 16,
-            "channels": 2,
-            "input_gain": 25,
-            "input_line": 2,
-            "sample_rate": 48000,
-        },
-        "auth_required": admin_required,
-        "capabilities": {
-            "adc_atten_max_db": 12,
-            "analog_passthrough": (
-                {"label": "Line output", "output_line": 1} if passthrough_capable else None
-            ),
-            "board": "AudioKit v2.2",
-            "board_id": "esp32-audiokit-v2-2",
-            "codec": {"driver": "es8388", "i2c_address": 16},
-            "input_gain_max": 100,
-            "input_lines": [
-                {"label": "Line 1", "line": 1},
-                {"label": "Line 2", "line": 2},
-            ],
-            "pins": {
-                "i2c": {"scl": 32, "sda": 33},
-                "i2s": {"bclk": 27, "din": 35, "mclk": 0, "ws": 25},
-            },
-            "leds": [
-                {
-                    "id": "status",
-                    "label": "Status LED",
-                    "gpio": 22,
-                    "active_low": True,
-                    "default_role": "status",
-                }
-            ],
-        },
-        "config_source": "nvs",
-        "configuration_writable": writable,
-        "device_name": "Living Room StreamLine",
-        "diagnostics": {
-            "last_fallback": "",
-            "last_ota": last_ota,
-            "reset_reason": "software",
-        },
-        "firmware_version": "0.6.1",
-        "health": {"checks": [], "status": "ok"},
-        "indicator": {"available": True, "state": "idle"},
-        "metrics": {
-            "bytes": 4096,
-            "clip_threshold_abs": 32000,
-            "clipped_samples_total": 2,
-            "network_errors_total": 1,
-            "noise_floor": 21,
-            "packets": 42,
-            "peak_abs_left": peak,
-            "peak_abs_right": peak // 2,
-            "playing": playing,
-            "queue_depth": 0,
-            "queue_drops_total": 0,
-            "read_errors": 0,
-            "reconnects_total": 1,
-            "rms_left": 100,
-            "rms_right": 80,
-            "sequence": 42,
-            "short_reads": 0,
-            "tls_handshake_failures_total": 0,
-        },
-        "mode": "provisioned",
-        "ota": {
-            "busy": ota_busy,
-            "bytes_total": 0,
-            "bytes_written": 0,
-            "latest_version": latest_version,
-            "message": "",
-            "phase": ota_phase,
-            "rollback_available": False,
-            "rollback_version": "",
-        },
-        "system": {
-            "uptime_seconds": 86400,
-            "task_count": 18,
-            "heap": {
-                "free_bytes": 142000,
-                "total_bytes": 300000,
-                "minimum_free_bytes": 120000,
-                "largest_free_block_bytes": 96000,
-            },
-            "nvs": {
-                "used_entries": 210,
-                "available_entries": 420,
-                "total_entries": 630,
-            },
-        },
-        "target": {
-            "target_host": "bridge.local",
-            "target_port": 39000,
-            "transport": transport,
-        },
-        "web_server": True,
-        "wifi": {
-            "ap_ip": "",
-            "hostname": "streamline.local",
-            "rssi": -54,
-            "ssid": "example-network",
-            "sta_ip": "192.0.2.10",
-            "status": "connected",
-        },
+    payload = copy.deepcopy(_STATUS_EXAMPLE)
+    payload["device_name"] = name
+    payload["auth_required"] = admin_required
+    payload["configuration_writable"] = writable
+    if not passthrough_capable:
+        payload["capabilities"]["analog_passthrough"] = None
+    payload["analog_passthrough"] = {
+        "active": passthrough_enabled,
+        "enabled": passthrough_enabled,
+        "fault": None,
     }
+    payload["metrics"]["playing"] = playing
+    payload["metrics"]["peak_abs_left"] = peak
+    payload["metrics"]["peak_abs_right"] = peak // 2
+    payload["ota"]["busy"] = ota_busy
+    payload["ota"]["phase"] = ota_phase
+    payload["ota"]["latest_version"] = latest_version
+    payload["diagnostics"]["last_ota"] = last_ota
+    payload["target"]["transport"] = transport
     StatusResponse.model_validate(payload)
     return payload
 
 
-def device_settings(*, schedule: str = "daily") -> dict[str, Any]:
+def device_settings(
+    *, name: str = "Living Room StreamLine", schedule: str = "daily"
+) -> dict[str, Any]:
     """Return one complete persisted settings payload."""
-    payload: dict[str, Any] = {
-        "adc_attenuation_db": 3,
-        "analog_passthrough_enabled": False,
-        "led_roles": [{"id": "status", "role": "status"}],
-        "auto_update_schedule": schedule,
-        "config_source": "nvs",
-        "device_name": "Living Room StreamLine",
-        "input_gain": 25,
-        "input_line": 2,
-        "ssid": "example-network",
-        "target_host": "bridge.local",
-        "target_port": 39000,
-        "transport": {
-            "active_key_id": None,
-            "contract_version": 1,
-            "mode": "cleartext",
-            "pending_key_id": None,
-            "pending_verified": False,
-            "rollback_key_id": None,
-        },
-    }
+    payload = copy.deepcopy(_CONFIG_EXAMPLE)
+    payload["device_name"] = name
+    payload["auto_update_schedule"] = schedule
     ConfigResponse.model_validate(payload)
     return payload
 

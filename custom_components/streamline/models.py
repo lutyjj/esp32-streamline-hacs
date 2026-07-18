@@ -28,7 +28,15 @@ class AdminKeySettingsRequest(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
     )
-    admin_secret: Annotated[str, Field(min_length=8)]
+    admin_secret: Annotated[
+        str,
+        Field(
+            description="Generated 48-character lowercase-hex admin key.",
+            max_length=48,
+            min_length=48,
+            pattern="^[0-9a-f]{48}$",
+        ),
+    ]
 
 
 class AnalogPassthroughCapability(BaseModel):
@@ -281,6 +289,7 @@ class MetricsStatus(BaseModel):
     rms_right: Annotated[int, Field(ge=0)]
     sequence: Annotated[int, Field(ge=0)]
     short_reads: Annotated[int, Field(ge=0)]
+    stale_drops_total: Annotated[int, Field(ge=0)]
     tls_handshake_failures_total: Annotated[int, Field(ge=0)]
 
 
@@ -424,7 +433,11 @@ class WifiSettingsRequest(BaseModel):
         extra="ignore",
     )
     admin_secret: Annotated[
-        str | None, Field(description="Admin key. Empty preserves the stored key.", min_length=8)
+        str | None,
+        Field(
+            description="Generated 48-character lowercase-hex admin key. Empty preserves the\nstored key.",
+            pattern="^$|^[0-9a-f]{48}$",
+        ),
     ] = None
     password: Annotated[
         str | None, Field(description="Wi-Fi password. Empty preserves the stored password.")
