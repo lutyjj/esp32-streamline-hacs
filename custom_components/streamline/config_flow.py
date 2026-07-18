@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
-DEFAULT_DEVICE_URL = "http://streamline.local"
 
 
 class StreamLineConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -111,7 +110,8 @@ def _schema(defaults: Mapping[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(
-                CONF_DEVICE_URL, default=defaults.get(CONF_DEVICE_URL, DEFAULT_DEVICE_URL)
+                CONF_DEVICE_URL,
+                description={"suggested_value": defaults.get(CONF_DEVICE_URL)},
             ): str,
             vol.Optional(CONF_ADMIN_KEY, default=defaults.get(CONF_ADMIN_KEY, "")): TOKEN_SELECTOR,
         }

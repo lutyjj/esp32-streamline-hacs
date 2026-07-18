@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
+import voluptuous as vol
 from aiohttp import ClientConnectionError
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
@@ -73,6 +74,17 @@ async def test_user_flow_rejects_non_root_url_without_network_call(
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {CONF_DEVICE_URL: "invalid_url"}
     assert not aioclient_mock.mock_calls
+
+
+async def test_user_flow_does_not_prefill_a_device_url(hass: HomeAssistant) -> None:
+    """First setup must not suggest a hostname that no StreamLine device advertises."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+
+    assert result["type"] is FlowResultType.FORM
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    device_marker = next(marker for marker in data_schema.schema if marker == CONF_DEVICE_URL)
+    assert device_marker.default is vol.UNDEFINED
 
 
 async def test_user_flow_reports_connection_failure(
