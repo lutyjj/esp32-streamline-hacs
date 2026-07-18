@@ -32,11 +32,12 @@ def client(hass: HomeAssistant, key: str | None = None) -> StreamLineDeviceClien
 async def test_status_parses_into_generated_model(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    aioclient_mock.get(f"{DEVICE_URL}/api/status", json=device_status())
+    payload = device_status()
+    aioclient_mock.get(f"{DEVICE_URL}/api/status", json=payload)
 
     status = await client(hass).async_get_status()
 
-    assert status.device_name == "Living Room StreamLine"
+    assert status.device_name == payload["device_name"]
     assert status.metrics.playing is True
 
 
@@ -147,7 +148,7 @@ async def test_additive_device_fields_are_forward_compatible(
 
     status = await client(hass).async_get_status()
 
-    assert status.metrics.packets == 42
+    assert status.metrics.packets == payload["metrics"]["packets"]
 
 
 def test_normalize_device_url_canonicalizes_root() -> None:

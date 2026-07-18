@@ -12,10 +12,10 @@ TOOLS := tools
 MODELS := $(SOURCE)/models.py
 GENERATED_MODELS := .models.generated.py
 # The current StreamLine mainline device contract is the compatibility baseline
-# (post-0.6.1: adds device resource telemetry and board LED roles). Advance this
-# immutable commit only when the integration intentionally requires a newer
-# device contract.
-STREAMLINE_CONTRACT_REF := e59d059046a8ea09a73212fd5e2adac5f713c568
+# (post-0.6.1: device resource telemetry, board LED roles, and the canonical
+# example device the test payloads derive from). Advance this immutable commit
+# only when the integration intentionally requires a newer device contract.
+STREAMLINE_CONTRACT_REF := 952057de135220fb89decdc370ba89fd2b9a1c2a
 STREAMLINE_REF ?= $(STREAMLINE_CONTRACT_REF)
 OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
 VERSION ?= $(shell sed -n 's/^  "version": "\([^"]*\)"/\1/p' $(SOURCE)/manifest.json)

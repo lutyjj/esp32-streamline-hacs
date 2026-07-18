@@ -37,14 +37,14 @@ async def test_entities_report_device_state_and_limits(
 
     assert state_of(hass, PLAYING_SENSOR) == STATE_ON
     assert state_of(hass, PEAK_SENSOR) == "50.0"
-    assert state_of(hass, WIFI_SENSOR) == "-54"
+    assert state_of(hass, WIFI_SENSOR) == "-55"
     assert state_of(hass, HEALTH_SENSOR) == "ok"
     assert state_of(hass, ENCRYPTION_SENSOR) == "disabled"
     assert state_of(hass, OTA_SENSOR) == "idle"
-    assert state_of(hass, INPUT_SELECT) == "Line 2"
+    assert state_of(hass, INPUT_SELECT) == "Line 2 — 3.5 mm jack"
     assert state_of(hass, UPDATE_SCHEDULE_SELECT) == "daily"
-    assert state_of(hass, GAIN_NUMBER) == "25"
-    assert state_of(hass, ATTENUATION_NUMBER) == "3"
+    assert state_of(hass, GAIN_NUMBER) == "0"
+    assert state_of(hass, ATTENUATION_NUMBER) == "9"
     assert state_of(hass, PASSTHROUGH_SWITCH) == STATE_OFF
     assert state_of(hass, FIRMWARE_UPDATE) == STATE_OFF
 
@@ -53,11 +53,12 @@ async def test_entities_report_device_state_and_limits(
     assert gain is not None
     assert attenuation is not None
     assert gain.attributes["max"] == 100
-    assert attenuation.attributes["max"] == 12
+    assert attenuation.attributes["max"] == 48
     firmware = hass.states.get(FIRMWARE_UPDATE)
     assert firmware is not None
-    assert firmware.attributes["installed_version"] == "0.6.1"
-    assert firmware.attributes["latest_version"] == "0.6.1"
+    installed = device_status()["firmware_version"]
+    assert firmware.attributes["installed_version"] == installed
+    assert firmware.attributes["latest_version"] == installed
     assert firmware.attributes["auto_update"] is True
 
 
@@ -98,7 +99,7 @@ async def test_audio_control_preserves_other_values(
         call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/audio"
     )
     assert update[2] == {
-        "adc_attenuation_db": "3",
+        "adc_attenuation_db": "9",
         "input_gain": "40",
         "input_line": "2",
     }
@@ -115,7 +116,7 @@ async def test_input_and_passthrough_controls_use_device_api(
     await hass.services.async_call(
         "select",
         "select_option",
-        {"entity_id": INPUT_SELECT, "option": "Line 1"},
+        {"entity_id": INPUT_SELECT, "option": "Line 1 — header pins"},
         blocking=True,
     )
     await hass.services.async_call(
