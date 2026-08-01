@@ -21,7 +21,7 @@ from .errors import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+ADMIN_KEY_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 class StreamLineConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -73,7 +73,7 @@ class StreamLineConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(entry, data=data)
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_ADMIN_KEY): TOKEN_SELECTOR}),
+            data_schema=vol.Schema({vol.Required(CONF_ADMIN_KEY): ADMIN_KEY_SELECTOR}),
             errors=errors,
         )
 
@@ -113,7 +113,9 @@ def _schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_DEVICE_URL,
                 description={"suggested_value": defaults.get(CONF_DEVICE_URL)},
             ): str,
-            vol.Optional(CONF_ADMIN_KEY, default=defaults.get(CONF_ADMIN_KEY, "")): TOKEN_SELECTOR,
+            vol.Optional(
+                CONF_ADMIN_KEY, default=defaults.get(CONF_ADMIN_KEY, "")
+            ): ADMIN_KEY_SELECTOR,
         }
     )
 

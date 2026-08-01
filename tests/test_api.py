@@ -15,7 +15,8 @@ from custom_components.streamline.errors import (
     StreamLineCannotConnect,
 )
 
-from .device_payloads import DEVICE_URL, device_settings, device_status, error_response
+from .device_payloads import DEVICE_URL, device_settings, device_status
+from .digest_device import DigestDevice
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -41,17 +42,16 @@ async def test_status_parses_into_generated_model(
     assert status.metrics.playing is True
 
 
-async def test_audio_update_sends_bearer_key_and_form(
+async def test_audio_update_sends_generated_form(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
     aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
 
     await client(hass, ADMIN_KEY).async_set_audio(2, 25, 3)
 
-    method, _url, body, headers = aioclient_mock.mock_calls[0]
+    method, _url, body, _headers = aioclient_mock.mock_calls[0]
     assert method == "POST"
     assert body == {"input_line": "2", "input_gain": "25", "adc_attenuation_db": "3"}
-    assert headers["Authorization"] == f"Bearer {ADMIN_KEY}"
 
 
 async def test_passthrough_boolean_is_lowercase_form_value(
@@ -64,7 +64,7 @@ async def test_passthrough_boolean_is_lowercase_form_value(
     assert aioclient_mock.mock_calls[0][2] == {"enabled": "true"}
 
 
-async def test_update_operations_use_generated_forms_and_bearer_key(
+async def test_update_operations_use_generated_forms(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
     aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=device_settings())
@@ -80,9 +80,6 @@ async def test_update_operations_use_generated_forms_and_bearer_key(
 
     assert settings.auto_update_schedule.root == "daily"
     assert aioclient_mock.mock_calls[1][2] == {"auto_update_schedule": "weekly"}
-    assert all(
-        call[3]["Authorization"] == f"Bearer {ADMIN_KEY}" for call in aioclient_mock.mock_calls[1:]
-    )
 
 
 async def test_authenticated_call_without_key_fails_before_request(
@@ -94,17 +91,69 @@ async def test_authenticated_call_without_key_fails_before_request(
     assert not aioclient_mock.mock_calls
 
 
-async def test_unauthorized_response_maps_to_authentication_error(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+async def test_authenticated_request_answers_the_device_digest_challenge(
+    hass: HomeAssistant, socket_enabled: None
 ) -> None:
-    aioclient_mock.post(
-        f"{DEVICE_URL}/api/unlock",
-        status=401,
-        json=error_response("invalid admin key"),
-    )
+    """Prove the admin key against a device that really challenges for it."""
+    async with DigestDevice(ADMIN_KEY) as device:
+        device.route("POST", "/api/unlock", payload={"ok": True}, authenticated=True)
+        await StreamLineDeviceClient(
+            async_get_clientsession(hass), device.url, ADMIN_KEY
+        ).async_unlock()
 
-    with pytest.raises(StreamLineAuthenticationError, match="invalid admin key"):
-        await client(hass, ADMIN_KEY).async_unlock()
+    assert device.authenticated_paths == ["/api/unlock"]
+
+
+async def test_repeated_writes_keep_the_nonce_count_rising(
+    hass: HomeAssistant, socket_enabled: None
+) -> None:
+    """A device that rejects a reused nonce count must still accept every write."""
+    async with DigestDevice(ADMIN_KEY) as device:
+        device.route("POST", "/api/unlock", payload={"ok": True}, authenticated=True)
+        streamline = StreamLineDeviceClient(async_get_clientsession(hass), device.url, ADMIN_KEY)
+
+        await streamline.async_unlock()
+        await streamline.async_unlock()
+
+    assert device.authenticated_paths == ["/api/unlock", "/api/unlock"]
+
+
+async def test_expired_nonce_is_renewed_without_reauthentication(
+    hass: HomeAssistant, socket_enabled: None
+) -> None:
+    """The device expires nonces hourly; a renewal must not surface as a failure."""
+    async with DigestDevice(ADMIN_KEY) as device:
+        device.route("POST", "/api/unlock", payload={"ok": True}, authenticated=True)
+        streamline = StreamLineDeviceClient(async_get_clientsession(hass), device.url, ADMIN_KEY)
+        await streamline.async_unlock()
+
+        device.expire_nonce()
+        await streamline.async_unlock()
+
+    assert device.authenticated_paths == ["/api/unlock", "/api/unlock"]
+
+
+async def test_wrong_admin_key_maps_to_authentication_error(
+    hass: HomeAssistant, socket_enabled: None
+) -> None:
+    async with DigestDevice(ADMIN_KEY) as device:
+        device.route("POST", "/api/unlock", payload={"ok": True}, authenticated=True)
+        streamline = StreamLineDeviceClient(async_get_clientsession(hass), device.url, "wrong-key")
+
+        with pytest.raises(StreamLineAuthenticationError, match="invalid admin key"):
+            await streamline.async_unlock()
+
+    assert not device.authenticated_paths
+
+
+async def test_reads_need_no_admin_key(hass: HomeAssistant, socket_enabled: None) -> None:
+    async with DigestDevice(ADMIN_KEY) as device:
+        device.route("GET", "/api/status", payload=device_status(), authenticated=False)
+        status = await StreamLineDeviceClient(
+            async_get_clientsession(hass), device.url
+        ).async_get_status()
+
+    assert status.metrics.playing is True
 
 
 @pytest.mark.parametrize(

@@ -45,9 +45,13 @@ device credential.
 ## Requirements
 
 - Home Assistant 2026.7 or newer
-- ESP32 StreamLine firmware 0.6.1 or newer
+- ESP32 StreamLine firmware 0.11.0 or newer
 - Network access from Home Assistant to the device HTTP API
 - The device admin key for controls and firmware management
+
+Firmware 0.11.0 replaced bearer tokens with RFC 7616 digest authentication, so
+the admin key never crosses the network. Monitoring an older device still
+works, but controls and firmware management need 0.11.0 or newer.
 
 ## Install
 
