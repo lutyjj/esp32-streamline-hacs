@@ -6,7 +6,7 @@ from contextlib import suppress
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
-from aiohttp import ClientError, ClientTimeout
+from aiohttp import ClientError, ClientTimeout, DigestAuthMiddleware
 from pydantic import BaseModel, ValidationError
 from yarl import URL
 
@@ -27,9 +27,13 @@ from .models import (
 )
 
 if TYPE_CHECKING:
-    from aiohttp import ClientResponse, ClientSession
+    from aiohttp import ClientMiddlewareType, ClientResponse, ClientSession
 
 REQUEST_TIMEOUT = ClientTimeout(total=10)
+# The device's single owner account. It answers an authenticated request with
+# an RFC 7616 digest challenge, so the admin key is the password of the one
+# username the firmware accepts and never crosses the network itself.
+ADMIN_USERNAME = "admin"
 
 
 class StreamLineDeviceClient:
@@ -43,7 +47,9 @@ class StreamLineDeviceClient:
     ) -> None:
         self._session = session
         self._base_url = URL(normalize_device_url(device_url))
-        self._admin_key = admin_key or None
+        # One middleware for this device's lifetime: it carries the challenge
+        # and the nonce count the firmware requires to strictly increase.
+        self._digest_auth = DigestAuthMiddleware(ADMIN_USERNAME, admin_key) if admin_key else None
 
     @property
     def device_url(self) -> str:
@@ -53,7 +59,7 @@ class StreamLineDeviceClient:
     @property
     def has_admin_key(self) -> bool:
         """Return whether authenticated device control is possible."""
-        return self._admin_key is not None
+        return self._digest_auth is not None
 
     async def async_get_status(self) -> StatusResponse:
         """Read device status, metrics, and capabilities."""
@@ -122,17 +128,17 @@ class StreamLineDeviceClient:
         authenticated: bool = False,
         form: BaseModel | None = None,
     ) -> ModelT:
-        headers: dict[str, str] = {}
+        middlewares: tuple[ClientMiddlewareType, ...] = ()
         if authenticated:
-            if self._admin_key is None:
+            if self._digest_auth is None:
                 raise StreamLineAuthenticationError("a device admin key is required")
-            headers["Authorization"] = f"Bearer {self._admin_key}"
+            middlewares = (self._digest_auth,)
         try:
             async with self._session.request(
                 method,
                 self._base_url.with_path(path),
-                headers=headers,
                 data=_form_data(form) if form is not None else None,
+                middlewares=middlewares,
                 timeout=REQUEST_TIMEOUT,
             ) as response:
                 if response.status >= HTTPStatus.BAD_REQUEST:

@@ -12,11 +12,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from custom_components.streamline.api import StreamLineDeviceClient
 from custom_components.streamline.const import UPDATE_SCHEDULES
 
-from .device_payloads import DEVICE_URL, device_settings, device_status
+from .device_payloads import device_settings, device_status
+from .digest_device import DigestDevice
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 ADMIN_KEY = "admin-key-1234"
 OPENAPI: dict[str, Any] = json.loads(Path(os.environ["STREAMLINE_OPENAPI"]).read_text())
@@ -41,10 +41,14 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "factory_reset": "destructive device recovery stays in the device console",
     "get_audio_profiles": "audio profile authoring stays in the device console",
     "get_boards": "board selection stays in the device console",
+    "get_coredump": "crash dump triage stays in the device console",
+    "get_coredump_image": "a crash dump is an ELF image for espcoredump.py, not a device control",
     "get_health": "device status already embeds the health report",
+    "get_logs": "the device log is console diagnostics, not a Home Assistant capability",
     "get_metrics": "device status already embeds the metrics used by Home Assistant",
     "get_openapi": "this development endpoint is not a Home Assistant capability",
     "ota_rollback": "firmware recovery stays in the device console",
+    "post_coredump_erase": "crash dump triage stays in the device console",
     "recover_transport": "transport recovery requires the coordinated bridge workflow",
     "restart": "the integration exposes no restart control",
     "retire_transport_key": "transport encryption requires the coordinated bridge workflow",
@@ -53,8 +57,10 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "set_audio_profile": "audio profile authoring stays in the device console",
     "set_audio_profiles": "audio profile authoring stays in the device console",
     "set_board": "board selection stays in the device console",
+    "set_button": "board button actions are not exposed yet",
     "set_led": "board LED role assignment stays in the device console",
     "set_name": "device identity stays in the device console",
+    "set_stream": "runtime streaming control is not exposed yet",
     "set_target": "bridge destination setup stays in the device console",
     "set_transport_mode": "transport encryption requires the coordinated bridge workflow",
     "set_wifi": "network commissioning stays in the device console",
@@ -71,6 +77,16 @@ def _operations() -> dict[str, dict[str, Any]]:
     }
 
 
+def _requires_digest(operation: dict[str, Any]) -> bool:
+    """Return whether the contract gates one operation behind the admin key."""
+    return any("digest_auth" in rule for rule in operation.get("security") or [])
+
+
+def _success_status(operation: dict[str, Any]) -> int:
+    """Return the one non-error status the contract declares for an operation."""
+    return min(int(status) for status in operation["responses"] if status.startswith("2"))
+
+
 def test_every_device_operation_has_an_explicit_integration_disposition() -> None:
     assert not SUPPORTED_OPERATIONS & INTENTIONALLY_UNSUPPORTED_OPERATIONS.keys()
     assert set(_operations()) == SUPPORTED_OPERATIONS | INTENTIONALLY_UNSUPPORTED_OPERATIONS.keys()
@@ -85,28 +101,64 @@ def test_update_schedule_options_and_translations_match_openapi() -> None:
     assert set(translations) == set(contract_options)
 
 
-async def test_every_client_operation_matches_openapi_contract(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
-) -> None:
-    """Pin hand-written method, path, and authentication facts to OpenAPI."""
-    aioclient_mock.get(f"{DEVICE_URL}/api/status", json=device_status())
-    aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=device_settings())
-    aioclient_mock.post(f"{DEVICE_URL}/api/unlock", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/settings/analog-passthrough", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/settings/firmware", json={"ok": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/ota/check", status=202, json={"started": True})
-    aioclient_mock.post(f"{DEVICE_URL}/api/ota/update", status=202, json={"started": True})
+def _operation_payload(operation_id: str) -> dict[str, Any]:
+    """Return a contract-shaped response body for one supported operation."""
+    match operation_id:
+        case "get_status":
+            return device_status()
+        case "get_settings":
+            return device_settings()
+        case "ota_check" | "ota_update":
+            return {"started": True}
+        case _:
+            return {"ok": True}
 
-    device = StreamLineDeviceClient(async_get_clientsession(hass), DEVICE_URL, ADMIN_KEY)
-    await device.async_get_status()
-    await device.async_get_settings()
-    await device.async_unlock()
-    await device.async_set_audio(2, 25, 3)
-    await device.async_set_analog_passthrough(True)
-    await device.async_set_update_schedule("weekly")
-    await device.async_check_firmware_update()
-    await device.async_install_firmware_update()
+
+async def test_every_client_operation_matches_openapi_contract(
+    hass: HomeAssistant, socket_enabled: None
+) -> None:
+    """Pin hand-written method, path, and authentication facts to OpenAPI.
+
+    The device answers each operation the way the contract declares it, so a
+    call can only succeed by using the method and path OpenAPI names and by
+    proving the admin key wherever OpenAPI requires ``digest_auth``.
+    """
+    operations = _operations()
+    async with DigestDevice(ADMIN_KEY) as served_device:
+        for path, methods in OPENAPI["paths"].items():
+            for method, operation in methods.items():
+                if operation["operationId"] not in SUPPORTED_OPERATIONS:
+                    continue
+                served_device.route(
+                    method,
+                    path,
+                    payload=_operation_payload(operation["operationId"]),
+                    authenticated=_requires_digest(operation),
+                    status=_success_status(operation),
+                )
+
+        device = StreamLineDeviceClient(async_get_clientsession(hass), served_device.url, ADMIN_KEY)
+        await device.async_get_status()
+        await device.async_get_settings()
+        await device.async_unlock()
+        await device.async_set_audio(2, 25, 3)
+        await device.async_set_analog_passthrough(True)
+        await device.async_set_update_schedule("weekly")
+        await device.async_check_firmware_update()
+        await device.async_install_firmware_update()
+
+        observed = {
+            OPENAPI["paths"][path][method.lower()]["operationId"]
+            for method, path in served_device.served_requests
+        }
+        digest_paths = sorted(
+            path
+            for path, methods in OPENAPI["paths"].items()
+            for operation in methods.values()
+            if operation["operationId"] in SUPPORTED_OPERATIONS and _requires_digest(operation)
+        )
+        assert sorted(set(served_device.authenticated_paths)) == digest_paths
+
     exercised_methods = {
         "async_check_firmware_update",
         "async_get_settings",
@@ -120,14 +172,5 @@ async def test_every_client_operation_matches_openapi_contract(
 
     public_methods = {name for name in dir(StreamLineDeviceClient) if name.startswith("async_")}
     assert public_methods == exercised_methods
-
-    observed_operations = set()
-    operations = _operations()
-    for method, url, _body, headers in aioclient_mock.mock_calls:
-        operation = OPENAPI["paths"][url.path][method.lower()]
-        observed_operations.add(operation["operationId"])
-        requires_bearer = any("bearer_auth" in rule for rule in operation.get("security") or [])
-        assert ("Authorization" in (headers or {})) == requires_bearer, (method, url.path)
-
-    assert observed_operations == SUPPORTED_OPERATIONS
-    assert observed_operations <= operations.keys()
+    assert observed == SUPPORTED_OPERATIONS
+    assert observed <= operations.keys()

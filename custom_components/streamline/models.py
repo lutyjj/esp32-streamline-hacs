@@ -129,6 +129,92 @@ class BoardSettingsRequest(BaseModel):
     ] = None
 
 
+class BootLog(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    boot: Annotated[
+        int,
+        Field(
+            description="Identifies the run of the firmware these lines came from. A poller\ncompares it to tell more lines from a restart that began counting\nagain, which sequence numbers alone cannot express.",
+            ge=0,
+        ),
+    ]
+    dropped: Annotated[
+        int,
+        Field(
+            description="Lines this boot produced that the buffer has already discarded. A\nnon-zero count means `text` starts later than the boot did.",
+            ge=0,
+        ),
+    ]
+    first_sequence: Annotated[
+        int,
+        Field(
+            description="Position of the first line within the boot, counted from zero. Each\nfollowing line is one higher.",
+            ge=0,
+        ),
+    ]
+    text: Annotated[str, Field(description="The held lines, oldest first, separated by newlines.")]
+
+
+class ButtonAction(
+    RootModel[
+        Literal[
+            "none",
+            "toggle_stream",
+            "cycle_input",
+            "gain_up",
+            "gain_down",
+            "attenuation_up",
+            "attenuation_down",
+            "restart",
+            "factory_reset",
+        ]
+    ]
+):
+    root: Annotated[
+        Literal[
+            "none",
+            "toggle_stream",
+            "cycle_input",
+            "gain_up",
+            "gain_down",
+            "attenuation_up",
+            "attenuation_down",
+            "restart",
+            "factory_reset",
+        ],
+        Field(description="The action assigned to a single board button, fired on a simple press."),
+    ]
+
+
+class ButtonActionStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    action: ButtonAction
+    id: str
+
+
+class ButtonCapabilityStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    active_low: bool
+    default_action: ButtonAction
+    gpio: Annotated[int, Field(ge=0)]
+    id: str
+    label: str
+
+
+class ButtonSettingsRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    action: ButtonAction
+    id: str
+
+
 class CheckStatus(RootModel[Literal["ok", "warn", "fail"]]):
     root: Annotated[
         Literal["ok", "warn", "fail"],
@@ -150,6 +236,19 @@ class CodecStatus(BaseModel):
     )
     driver: str
     i2c_address: Annotated[int, Field(ge=0)]
+
+
+class CoredumpResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    present: Annotated[
+        bool, Field(description="Whether the partition holds a valid dump from an earlier panic.")
+    ]
+    size_bytes: Annotated[
+        int,
+        Field(description="Size of the stored ELF image in bytes; `0` when none is stored.", ge=0),
+    ]
 
 
 class DiagnosticsStatus(BaseModel):
@@ -268,6 +367,14 @@ class LedSettingsRequest(BaseModel):
     role: LedRole
 
 
+class LogsResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    current: BootLog
+    previous: BootLog | None = None
+
+
 class MetricsStatus(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -275,6 +382,7 @@ class MetricsStatus(BaseModel):
     bytes: Annotated[int, Field(ge=0)]
     clip_threshold_abs: Annotated[int, Field(ge=0)]
     clipped_samples_total: Annotated[int, Field(ge=0)]
+    longest_send_stall_ms: Annotated[int, Field(ge=0)]
     network_errors_total: Annotated[int, Field(ge=0)]
     noise_floor: Annotated[int, Field(ge=0)]
     packets: Annotated[int, Field(ge=0)]
@@ -287,6 +395,7 @@ class MetricsStatus(BaseModel):
     reconnects_total: Annotated[int, Field(ge=0)]
     rms_left: Annotated[int, Field(ge=0)]
     rms_right: Annotated[int, Field(ge=0)]
+    send_stalls_total: Annotated[int, Field(ge=0)]
     sequence: Annotated[int, Field(ge=0)]
     short_reads: Annotated[int, Field(ge=0)]
     stale_drops_total: Annotated[int, Field(ge=0)]
@@ -321,6 +430,12 @@ class OtaStatus(BaseModel):
     phase: str
     rollback_available: bool
     rollback_version: str
+    signed_updates: Annotated[
+        bool,
+        Field(
+            description="Whether this firmware rejects an over-the-air image that is not signed by\nthe vendor key it trusts. Always true on a signed release build; false on\nan unsigned self-build."
+        ),
+    ]
 
 
 class OtaUpdateRequest(BaseModel):
@@ -328,7 +443,13 @@ class OtaUpdateRequest(BaseModel):
         extra="ignore",
     )
     sha256: Annotated[str | None, Field(pattern="^[0-9A-Fa-f]{64}$")] = None
-    url: Annotated[str | None, Field(pattern="^https?://")] = None
+    url: Annotated[
+        str | None,
+        Field(
+            description="HTTP(S) download URL. Query parameters are preserved; userinfo and\nfragments are rejected.",
+            pattern="^https?://[^/?#@\\s]+(?:[/?][^#\\s]*)?$",
+        ),
+    ] = None
 
 
 class PinMap(BaseModel):
@@ -347,6 +468,14 @@ class PinMapStatus(BaseModel):
     i2s: I2sPinsStatus
 
 
+class SetupNetworkResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    password: str
+    ssid: str
+
+
 class Severity(RootModel[Literal["ok", "info", "blocking"]]):
     root: Annotated[
         Literal["ok", "info", "blocking"],
@@ -354,6 +483,20 @@ class Severity(RootModel[Literal["ok", "info", "blocking"]]):
             description="How much a check's outcome matters to the user journey. A report's overall\n[`HealthReport::status`] is the worst severity across its checks."
         ),
     ]
+
+
+class StreamControlStatus(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    enabled: bool
+
+
+class StreamRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    enabled: bool
 
 
 class SystemStatus(BaseModel):
@@ -485,6 +628,34 @@ class AudioProfileCatalog(BaseModel):
     schema_version: Annotated[int, Field(ge=0)]
 
 
+class Button(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    active_low: Annotated[
+        bool | None,
+        Field(
+            description="`true` when the GPIO reads low while the button is held. The firmware\nenables the matching internal pull where the pin has one; input-only\npins (GPIO 34–39) rely on the board's own resistor."
+        ),
+    ] = None
+    default_action: Annotated[
+        ButtonAction | None,
+        Field(
+            description="Action fired until the user assigns another, so a board author can ship\nuseful presses while leaving spare buttons inert."
+        ),
+    ] = None
+    gpio: Annotated[int, Field(ge=0)]
+    id: Annotated[
+        str,
+        Field(
+            description="Stable id, unique within the board, used to address the button in\nsettings."
+        ),
+    ]
+    label: Annotated[
+        str, Field(description="Human-readable name the console shows for this button.")
+    ]
+
+
 class ConfigResponse(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -492,6 +663,10 @@ class ConfigResponse(BaseModel):
     adc_attenuation_db: Annotated[int, Field(ge=0)]
     analog_passthrough_enabled: bool
     auto_update_schedule: AutoUpdateScheduleRequest
+    button_actions: Annotated[
+        list[ButtonActionStatus],
+        Field(description="The effective action of every board button, in descriptor order."),
+    ]
     config_source: str
     device_name: str
     input_gain: Annotated[int, Field(ge=0)]
@@ -504,6 +679,14 @@ class ConfigResponse(BaseModel):
     target_host: str
     target_port: Annotated[int, Field(ge=0)]
     transport: TransportStatus
+
+
+class FactoryResetResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    rebooting: bool
+    setup_network: SetupNetworkResponse
 
 
 class HealthCheck(BaseModel):
@@ -577,6 +760,12 @@ class Board(BaseModel):
         int, Field(description="Upper bound of the ADC attenuation control, in dB.", ge=0)
     ]
     analog_passthrough: AnalogPassthroughCapability | None = None
+    buttons: Annotated[
+        list[Button] | None,
+        Field(
+            description="Board buttons the user can assign actions to, in console order. Empty\nwhen the board wires none."
+        ),
+    ] = None
     codec: Annotated[
         CodecSpec,
         Field(description="Codec driver and bus address needed to control line-in capture."),
@@ -619,6 +808,7 @@ class CapabilitiesStatus(BaseModel):
     analog_passthrough: AnalogPassthroughCapabilityStatus | None = None
     board: str
     board_id: str
+    buttons: list[ButtonCapabilityStatus]
     codec: CodecStatus
     input_gain_max: Annotated[int, Field(ge=0)]
     input_lines: list[InputLineStatus]
@@ -644,6 +834,7 @@ class StatusResponse(BaseModel):
     metrics: MetricsStatus
     mode: str
     ota: OtaStatus
+    stream: StreamControlStatus
     system: SystemStatus
     target: TargetStatus
     web_server: bool
