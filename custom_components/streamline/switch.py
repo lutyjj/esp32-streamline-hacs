@@ -1,4 +1,4 @@
-"""Local analog output control for StreamLine devices."""
+"""Streaming and local analog output switches for StreamLine devices."""
 
 from __future__ import annotations
 
@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
-from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .entity import StreamLineWritableEntity
+from .entity import StreamLineWritableEntity, add_entities_when_supported
 from .errors import StreamLineApiError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Iterable
 
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import StreamLineConfigEntry
@@ -26,29 +26,43 @@ async def async_setup_entry(
     entry: StreamLineConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Add analog passthrough when the current or a later board supports it."""
-    if entry.runtime_data.status.capabilities.analog_passthrough is not None:
-        async_add_entities([StreamLineAnalogPassthroughSwitch(entry)])
-        return
+    """Add streaming control, and analog passthrough on a board that has it."""
+    async_add_entities([StreamLineStreamSwitch(entry)])
+    add_entities_when_supported(entry, async_add_entities, _passthrough_entities)
 
-    remove_listener: Callable[[], None] | None = None
 
-    @callback
-    def remove_capability_listener() -> None:
-        nonlocal remove_listener
-        if remove_listener is not None:
-            remove_listener()
-            remove_listener = None
+def _passthrough_entities(entry: StreamLineConfigEntry) -> Iterable[Entity]:
+    if entry.runtime_data.status.capabilities.analog_passthrough is None:
+        return ()
+    return (StreamLineAnalogPassthroughSwitch(entry),)
 
-    @callback
-    def add_supported_entity() -> None:
-        if entry.runtime_data.status.capabilities.analog_passthrough is None:
-            return
-        async_add_entities([StreamLineAnalogPassthroughSwitch(entry)])
-        remove_capability_listener()
 
-    remove_listener = entry.runtime_data.async_add_listener(add_supported_entity)
-    entry.async_on_unload(remove_capability_listener)
+class StreamLineStreamSwitch(StreamLineWritableEntity, SwitchEntity):
+    """Pause or resume the device's audio stream to the bridge."""
+
+    _attr_translation_key = "streaming"
+
+    def __init__(self, entry: StreamLineConfigEntry) -> None:
+        super().__init__(entry, "streaming")
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether the device is streaming to the bridge."""
+        return self.coordinator.status.stream.enabled
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Resume streaming to the bridge."""
+        await self._async_set_stream(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Pause streaming to the bridge."""
+        await self._async_set_stream(False)
+
+    async def _async_set_stream(self, enabled: bool) -> None:
+        try:
+            await self.coordinator.async_set_stream(enabled)
+        except StreamLineApiError as exc:
+            raise HomeAssistantError(str(exc)) from exc
 
 
 class StreamLineAnalogPassthroughSwitch(StreamLineWritableEntity, SwitchEntity):

@@ -45,8 +45,19 @@
   },
   "entity": {
     "binary_sensor": {
+      "crash_dump": {
+        "name": "Crash dump"
+      },
       "playing": {
         "name": "Playing"
+      },
+      "signed_updates": {
+        "name": "Signed updates"
+      }
+    },
+    "button": {
+      "restart": {
+        "name": "Restart"
       }
     },
     "number": {
@@ -66,6 +77,20 @@
           "weekly": "Weekly"
         }
       },
+      "button_action": {
+        "name": "{button} action",
+        "state": {
+          "attenuation_down": "Attenuation down",
+          "attenuation_up": "Attenuation up",
+          "cycle_input": "Cycle input",
+          "factory_reset": "Factory reset",
+          "gain_down": "Gain down",
+          "gain_up": "Gain up",
+          "none": "None",
+          "restart": "Restart",
+          "toggle_stream": "Toggle streaming"
+        }
+      },
       "input": {
         "name": "Input"
       }
@@ -78,6 +103,12 @@
           "info": "Info",
           "ok": "OK"
         }
+      },
+      "longest_send_stall": {
+        "name": "Longest send stall"
+      },
+      "network_errors": {
+        "name": "Network errors"
       },
       "ota_status": {
         "name": "OTA status",
@@ -101,14 +132,14 @@
           "unknown": "Unknown"
         }
       },
+      "peak_level": {
+        "name": "Peak level"
+      },
       "reset_reason": {
         "name": "Reset reason"
       },
-      "network_errors": {
-        "name": "Network errors"
-      },
-      "peak_level": {
-        "name": "Peak level"
+      "send_stalls": {
+        "name": "Send stalls"
       },
       "wifi_signal": {
         "name": "Wi-Fi signal"
@@ -117,6 +148,9 @@
     "switch": {
       "analog_passthrough": {
         "name": "Analog passthrough"
+      },
+      "streaming": {
+        "name": "Streaming"
       }
     },
     "update": {

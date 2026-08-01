@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 
-from .device_payloads import DEVICE_URL, device_status
+from .device_payloads import DEVICE_URL, device_coredump, device_status
 from .integration_setup import setup_integration, state_of, stub_device
 
 if TYPE_CHECKING:
@@ -26,6 +26,10 @@ GAIN_NUMBER = "number.living_room_streamline_input_gain"
 ATTENUATION_NUMBER = "number.living_room_streamline_adc_attenuation"
 PASSTHROUGH_SWITCH = "switch.living_room_streamline_analog_passthrough"
 FIRMWARE_UPDATE = "update.living_room_streamline_firmware"
+STREAM_SWITCH = "switch.living_room_streamline_streaming"
+KEY1_ACTION_SELECT = "select.living_room_streamline_key_1_action"
+RESTART_BUTTON = "button.living_room_streamline_restart"
+CRASH_DUMP_SENSOR = "binary_sensor.living_room_streamline_crash_dump"
 
 
 async def test_entities_report_device_state_and_limits(
@@ -253,3 +257,102 @@ async def test_rejected_saved_key_starts_reauth_flow(
         if flow["context"].get("source") == "reauth"
     ]
     assert len(reauth_flows) == 1
+
+
+async def test_streaming_switch_pauses_and_resumes_the_bridge_stream(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/stream", json={"ok": True})
+    await setup_integration(hass)
+
+    assert state_of(hass, STREAM_SWITCH) == STATE_ON
+
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": STREAM_SWITCH}, blocking=True
+    )
+
+    stream = next(call for call in aioclient_mock.mock_calls if call[1].path == "/api/stream")
+    assert stream[2] == {"enabled": "false"}
+
+
+async def test_button_action_selects_follow_the_board_and_persist(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/button", json={"ok": True})
+    await setup_integration(hass)
+
+    key1 = hass.states.get(KEY1_ACTION_SELECT)
+    assert key1 is not None
+    assert key1.state == "toggle_stream"
+    assert "factory_reset" in key1.attributes["options"]
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": KEY1_ACTION_SELECT, "option": "gain_up"},
+        blocking=True,
+    )
+
+    assigned = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/button"
+    )
+    assert assigned[2] == {"id": "key1", "action": "gain_up"}
+    assert state_of(hass, KEY1_ACTION_SELECT) == "gain_up"
+
+
+async def test_button_selects_are_absent_on_a_board_without_buttons(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    status = device_status()
+    status["capabilities"]["buttons"] = []
+    stub_device(aioclient_mock, status=status)
+
+    await setup_integration(hass)
+
+    assert hass.states.get(KEY1_ACTION_SELECT) is None
+
+
+async def test_restart_button_reboots_the_device(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/restart", json={"ok": True, "rebooting": True})
+    await setup_integration(hass)
+
+    await hass.services.async_call("button", "press", {"entity_id": RESTART_BUTTON}, blocking=True)
+
+    assert any(call[1].path == "/api/restart" for call in aioclient_mock.mock_calls)
+
+
+async def test_crash_dump_sensor_reports_a_stored_panic(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock, coredump=device_coredump(present=True, size_bytes=65536))
+
+    await setup_integration(hass)
+
+    assert state_of(hass, CRASH_DUMP_SENSOR) == STATE_ON
+
+
+async def test_crash_dump_sensor_is_unavailable_without_an_admin_key(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+
+    await setup_integration(hass, admin_key=None)
+
+    assert state_of(hass, CRASH_DUMP_SENSOR) == STATE_UNAVAILABLE
+    assert "/api/coredump" not in {call[1].path for call in aioclient_mock.mock_calls}
+
+
+async def test_a_device_refusing_crash_dump_reads_keeps_every_other_entity(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock, coredump_status=503)
+
+    await setup_integration(hass)
+
+    assert state_of(hass, PLAYING_SENSOR) == STATE_ON
+    assert state_of(hass, CRASH_DUMP_SENSOR) == STATE_UNAVAILABLE

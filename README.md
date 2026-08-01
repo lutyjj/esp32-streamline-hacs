@@ -22,14 +22,25 @@ Each ESP32 appears as one Home Assistant device.
 |---|---|
 | Playing | Reports active audio capture. |
 | Peak level | Reports the highest current input level. |
+| Streaming | Pauses and resumes the audio stream to the bridge. |
 | Input, input gain, ADC attenuation | Control the device audio input. |
 | Analog passthrough | Controls local analog output on supported boards. |
+| Button actions | Assigns what each physical board button does on a press. |
+| Restart | Reboots the device. |
 | Wi-Fi signal, health | Report connectivity and startup health. |
 | PCM encryption | Reports whether the device-to-bridge audio transport uses TLS-PSK. |
 | Firmware | Checks for and installs the latest StreamLine firmware release, with progress. |
 | Automatic update schedule | Selects disabled, daily, or weekly device-managed updates. |
 | OTA status | Reports update phase, message, rollback availability, and the persisted last attempt. |
-| Network errors, reset reason | Extra diagnostics, disabled by default. |
+| Crash dump | Reports whether a panic left a dump on the device. Needs the admin key. |
+| Network errors, send stalls, reset reason, signed updates | Extra diagnostics, disabled by default. |
+
+Streaming is runtime state: the device resumes streaming after a reboot, and
+the `toggle_stream` button action flips the same switch from the board.
+
+Board buttons come from the device's own capabilities, so a board that
+advertises no buttons gets no button entities, and selecting another board in
+the device console changes them under a running entry.
 
 Controls require the device admin key. Monitoring works without it.
 

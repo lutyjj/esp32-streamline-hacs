@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 from pathlib import Path
@@ -10,9 +11,9 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from custom_components.streamline.api import StreamLineDeviceClient
-from custom_components.streamline.const import UPDATE_SCHEDULES
+from custom_components.streamline.const import BUTTON_ACTIONS, UPDATE_SCHEDULES
 
-from .device_payloads import device_settings, device_status
+from .device_payloads import device_coredump, device_settings, device_status
 from .digest_device import DigestDevice
 
 if TYPE_CHECKING:
@@ -25,13 +26,17 @@ TRANSLATIONS: dict[str, Any] = json.loads(
 )
 
 SUPPORTED_OPERATIONS = {
+    "get_coredump",
     "get_settings",
     "get_status",
     "ota_check",
     "ota_update",
+    "restart",
     "set_analog_passthrough",
     "set_audio",
+    "set_button",
     "set_firmware",
+    "set_stream",
     "unlock",
 }
 
@@ -41,7 +46,6 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "factory_reset": "destructive device recovery stays in the device console",
     "get_audio_profiles": "audio profile authoring stays in the device console",
     "get_boards": "board selection stays in the device console",
-    "get_coredump": "crash dump triage stays in the device console",
     "get_coredump_image": "a crash dump is an ELF image for espcoredump.py, not a device control",
     "get_health": "device status already embeds the health report",
     "get_logs": "the device log is console diagnostics, not a Home Assistant capability",
@@ -50,17 +54,14 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "ota_rollback": "firmware recovery stays in the device console",
     "post_coredump_erase": "crash dump triage stays in the device console",
     "recover_transport": "transport recovery requires the coordinated bridge workflow",
-    "restart": "the integration exposes no restart control",
     "retire_transport_key": "transport encryption requires the coordinated bridge workflow",
     "rollback_transport_key": "transport encryption requires the coordinated bridge workflow",
     "set_admin_key": "credential management stays in the device console",
     "set_audio_profile": "audio profile authoring stays in the device console",
     "set_audio_profiles": "audio profile authoring stays in the device console",
     "set_board": "board selection stays in the device console",
-    "set_button": "board button actions are not exposed yet",
     "set_led": "board LED role assignment stays in the device console",
     "set_name": "device identity stays in the device console",
-    "set_stream": "runtime streaming control is not exposed yet",
     "set_target": "bridge destination setup stays in the device console",
     "set_transport_mode": "transport encryption requires the coordinated bridge workflow",
     "set_wifi": "network commissioning stays in the device console",
@@ -101,6 +102,51 @@ def test_update_schedule_options_and_translations_match_openapi() -> None:
     assert set(translations) == set(contract_options)
 
 
+def _declared_translation_keys() -> dict[str, set[str]]:
+    """Collect every entity translation key each platform module declares."""
+    declared: dict[str, set[str]] = {}
+    for module in Path("custom_components/streamline").glob("*.py"):
+        platform = module.stem
+        if platform not in TRANSLATIONS["entity"]:
+            continue
+        declared[platform] = {
+            value
+            for node in ast.walk(ast.parse(module.read_text()))
+            if (value := _assigned_translation_key(node)) is not None
+        }
+    return declared
+
+
+def _assigned_translation_key(node: ast.AST) -> str | None:
+    """Return the translation key one node names, as a keyword or an attribute."""
+    match node:
+        case ast.keyword(arg="translation_key", value=ast.Constant(value=str() as key)):
+            return key
+        case ast.Assign(
+            targets=[ast.Name(id="_attr_translation_key")], value=ast.Constant(value=str() as key)
+        ):
+            return key
+        case _:
+            return None
+
+
+def test_every_entity_translation_is_declared_and_every_declaration_translated() -> None:
+    """Neither an unnamed entity nor a translation nothing consumes."""
+    declared = _declared_translation_keys()
+
+    assert declared.keys() == TRANSLATIONS["entity"].keys()
+    for platform, keys in declared.items():
+        assert keys == set(TRANSLATIONS["entity"][platform]), platform
+
+
+def test_button_action_options_and_translations_match_openapi() -> None:
+    contract_options = OPENAPI["components"]["schemas"]["ButtonAction"]["enum"]
+    translations = TRANSLATIONS["entity"]["select"]["button_action"]["state"]
+
+    assert set(BUTTON_ACTIONS) == set(contract_options)
+    assert set(translations) == set(contract_options)
+
+
 def _operation_payload(operation_id: str) -> dict[str, Any]:
     """Return a contract-shaped response body for one supported operation."""
     match operation_id:
@@ -108,6 +154,8 @@ def _operation_payload(operation_id: str) -> dict[str, Any]:
             return device_status()
         case "get_settings":
             return device_settings()
+        case "get_coredump":
+            return device_coredump()
         case "ota_check" | "ota_update":
             return {"started": True}
         case _:
@@ -140,12 +188,16 @@ async def test_every_client_operation_matches_openapi_contract(
         device = StreamLineDeviceClient(async_get_clientsession(hass), served_device.url, ADMIN_KEY)
         await device.async_get_status()
         await device.async_get_settings()
+        await device.async_get_coredump()
         await device.async_unlock()
         await device.async_set_audio(2, 25, 3)
         await device.async_set_analog_passthrough(True)
+        await device.async_set_stream(False)
+        await device.async_set_button("key1", "cycle_input")
         await device.async_set_update_schedule("weekly")
         await device.async_check_firmware_update()
         await device.async_install_firmware_update()
+        await device.async_restart()
 
         observed = {
             OPENAPI["paths"][path][method.lower()]["operationId"]
@@ -161,11 +213,15 @@ async def test_every_client_operation_matches_openapi_contract(
 
     exercised_methods = {
         "async_check_firmware_update",
+        "async_get_coredump",
         "async_get_settings",
         "async_get_status",
         "async_install_firmware_update",
+        "async_restart",
         "async_set_analog_passthrough",
         "async_set_audio",
+        "async_set_button",
+        "async_set_stream",
         "async_set_update_schedule",
         "async_unlock",
     }

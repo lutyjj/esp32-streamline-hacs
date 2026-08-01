@@ -9,16 +9,19 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import UPDATE_SCHEDULES
-from .entity import StreamLineWritableEntity
+from .const import BUTTON_ACTIONS, UPDATE_SCHEDULES
+from .entity import StreamLineWritableEntity, add_entities_when_supported
 from .errors import StreamLineApiError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import StreamLineConfigEntry
-    from .models import StatusResponse
+    from .models import ButtonCapabilityStatus, StatusResponse
 
 
 async def async_setup_entry(
@@ -26,8 +29,16 @@ async def async_setup_entry(
     entry: StreamLineConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Add the device input selector."""
+    """Add the input and schedule selectors, plus one per board button."""
     async_add_entities([StreamLineInputSelect(entry), StreamLineUpdateScheduleSelect(entry)])
+    add_entities_when_supported(entry, async_add_entities, _button_entities)
+
+
+def _button_entities(entry: StreamLineConfigEntry) -> Iterable[Entity]:
+    return [
+        StreamLineButtonActionSelect(entry, button)
+        for button in entry.runtime_data.status.capabilities.buttons
+    ]
 
 
 class StreamLineInputSelect(StreamLineWritableEntity, SelectEntity):
@@ -85,6 +96,45 @@ class StreamLineUpdateScheduleSelect(StreamLineWritableEntity, SelectEntity):
         """Persist a supported automatic update schedule."""
         try:
             await self.coordinator.async_set_update_schedule(option)
+        except (StreamLineApiError, ValueError) as exc:
+            raise HomeAssistantError(str(exc)) from exc
+
+
+class StreamLineButtonActionSelect(StreamLineWritableEntity, SelectEntity):
+    """Assign the action one physical board button fires on a press."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "button_action"
+
+    def __init__(self, entry: StreamLineConfigEntry, button: ButtonCapabilityStatus) -> None:
+        super().__init__(entry, f"button:{button.id}")
+        self._button_id = button.id
+        self._attr_options = list(BUTTON_ACTIONS)
+        self._attr_translation_placeholders = {"button": button.label}
+
+    @property
+    def available(self) -> bool:
+        """Report unavailable once a board stops advertising this button."""
+        return super().available and any(
+            button.id == self._button_id for button in self.coordinator.status.capabilities.buttons
+        )
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the button's effective action."""
+        return next(
+            (
+                assigned.action.root
+                for assigned in self.coordinator.settings.button_actions
+                if assigned.id == self._button_id
+            ),
+            None,
+        )
+
+    async def async_select_option(self, option: str) -> None:
+        """Assign this button a new action."""
+        try:
+            await self.coordinator.async_set_button(self._button_id, option)
         except (StreamLineApiError, ValueError) as exc:
             raise HomeAssistantError(str(exc)) from exc
 
