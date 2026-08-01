@@ -11,7 +11,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS_MILLIWATT, EntityCategory
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfTime,
+)
 
 from .entity import StreamLineEntity
 
@@ -128,6 +133,24 @@ SENSORS: tuple[StreamLineSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         value_fn=lambda status: status.metrics.network_errors_total,
+    ),
+    StreamLineSensorDescription(
+        key="send_stalls",
+        translation_key="send_stalls",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda status: status.metrics.send_stalls_total,
+    ),
+    StreamLineSensorDescription(
+        key="longest_send_stall",
+        translation_key="longest_send_stall",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda status: status.metrics.longest_send_stall_ms,
     ),
 )
 

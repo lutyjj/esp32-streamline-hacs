@@ -35,6 +35,7 @@ async def test_passthrough_entity_tracks_board_capability_changes(
         StreamLineData(
             status=StatusResponse.model_validate(device_status(passthrough_capable=True)),
             settings=coordinator.settings,
+            coredump=coordinator.data.coredump,
         )
     )
     await hass.async_block_till_done()
@@ -45,6 +46,7 @@ async def test_passthrough_entity_tracks_board_capability_changes(
         StreamLineData(
             status=StatusResponse.model_validate(device_status(passthrough_capable=False)),
             settings=coordinator.settings,
+            coredump=coordinator.data.coredump,
         )
     )
     await hass.async_block_till_done()

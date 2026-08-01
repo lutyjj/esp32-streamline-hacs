@@ -20,10 +20,14 @@ from .models import (
     AnalogPassthroughSettingsRequest,
     AudioSettingsRequest,
     AutoUpdateScheduleRequest,
+    ButtonAction,
+    ButtonSettingsRequest,
     ConfigResponse,
+    CoredumpResponse,
     ErrorResponse,
     FirmwareSettingsRequest,
     StatusResponse,
+    StreamRequest,
 )
 
 if TYPE_CHECKING:
@@ -69,6 +73,10 @@ class StreamLineDeviceClient:
         """Read persisted device settings."""
         return await self._request("GET", "/api/settings", ConfigResponse)
 
+    async def async_get_coredump(self) -> CoredumpResponse:
+        """Read whether a panic left a crash dump on the device."""
+        return await self._request("GET", "/api/coredump", CoredumpResponse, authenticated=True)
+
     async def async_unlock(self) -> Ack:
         """Validate the configured device admin key."""
         return await self._request("POST", "/api/unlock", Ack, authenticated=True)
@@ -98,6 +106,30 @@ class StreamLineDeviceClient:
             authenticated=True,
             form=AnalogPassthroughSettingsRequest(enabled=enabled),
         )
+
+    async def async_set_stream(self, enabled: bool) -> Ack:
+        """Pause or resume streaming to the bridge."""
+        return await self._request(
+            "POST",
+            "/api/stream",
+            Ack,
+            authenticated=True,
+            form=StreamRequest(enabled=enabled),
+        )
+
+    async def async_set_button(self, button_id: str, action: str) -> Ack:
+        """Assign one board button, named by its capabilities id, a new action."""
+        return await self._request(
+            "POST",
+            "/api/settings/button",
+            Ack,
+            authenticated=True,
+            form=ButtonSettingsRequest(id=button_id, action=ButtonAction.model_validate(action)),
+        )
+
+    async def async_restart(self) -> Ack:
+        """Ask the device to reboot."""
+        return await self._request("POST", "/api/restart", Ack, authenticated=True)
 
     async def async_set_update_schedule(self, schedule: str) -> Ack:
         """Set the device's automatic firmware update schedule."""

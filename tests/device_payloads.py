@@ -14,7 +14,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from custom_components.streamline.models import ConfigResponse, ErrorResponse, StatusResponse
+from custom_components.streamline.models import (
+    ConfigResponse,
+    CoredumpResponse,
+    ErrorResponse,
+    StatusResponse,
+)
 
 DEVICE_URL = "http://device.local"
 
@@ -70,6 +75,17 @@ def device_settings(
     payload["device_name"] = name
     payload["auto_update_schedule"] = schedule
     ConfigResponse.model_validate(payload)
+    return payload
+
+
+def device_coredump(*, present: bool = False, size_bytes: int = 0) -> dict[str, Any]:
+    """Return one crash dump status payload.
+
+    The contract carries no example for this schema, so the payload is built
+    from its fields and validated against the generated model.
+    """
+    payload = {"present": present, "size_bytes": size_bytes}
+    CoredumpResponse.model_validate(payload)
     return payload
 
 

@@ -8,7 +8,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.streamline.const import CONF_ADMIN_KEY, CONF_DEVICE_URL, DOMAIN
 
-from .device_payloads import DEVICE_URL, device_settings, device_status, error_response
+from .device_payloads import (
+    DEVICE_URL,
+    device_coredump,
+    device_settings,
+    device_status,
+    error_response,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -23,10 +29,19 @@ def stub_device(
     status: dict[str, Any] | None = None,
     unlock_status: int = 200,
     settings: dict[str, Any] | None = None,
+    coredump: dict[str, Any] | None = None,
+    coredump_status: int = 200,
 ) -> None:
     """Stub coordinator reads and initial authentication."""
     aioclient_mock.get(f"{DEVICE_URL}/api/status", json=status or device_status())
     aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=settings or device_settings())
+    aioclient_mock.get(
+        f"{DEVICE_URL}/api/coredump",
+        status=coredump_status,
+        json=coredump or device_coredump()
+        if coredump_status == 200
+        else error_response("crash dump unavailable"),
+    )
     aioclient_mock.post(
         f"{DEVICE_URL}/api/unlock",
         status=unlock_status,
