@@ -197,7 +197,7 @@ async def test_additive_device_fields_are_forward_compatible(
 
     status = await client(hass).async_get_status()
 
-    assert status.metrics.packets == payload["metrics"]["packets"]
+    assert status.metrics.packets_total == payload["metrics"]["packets_total"]
 
 
 def test_normalize_device_url_canonicalizes_root() -> None:

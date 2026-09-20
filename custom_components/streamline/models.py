@@ -28,7 +28,7 @@ class AdminKeySettingsRequest(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
     )
-    admin_secret: Annotated[
+    admin_key: Annotated[
         str,
         Field(
             description="Generated 48-character lowercase-hex admin key.",
@@ -108,7 +108,7 @@ class AudioStatus(BaseModel):
     channels: Annotated[int, Field(ge=0)]
     input_gain: Annotated[int, Field(ge=0)]
     input_line: Annotated[int, Field(ge=0)]
-    sample_rate: Annotated[int, Field(ge=0)]
+    sample_rate_hz: Annotated[int, Field(ge=0)]
 
 
 class AutoUpdateScheduleRequest(RootModel[Literal["disabled", "daily", "weekly"]]):
@@ -274,6 +274,10 @@ class FirmwareSettingsRequest(BaseModel):
     auto_update_schedule: AutoUpdateScheduleRequest
 
 
+class FirmwareVariant(RootModel[Literal["standard", "qemu", "test-source"]]):
+    root: Literal["standard", "qemu", "test-source"]
+
+
 class HeapStatus(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
@@ -379,26 +383,25 @@ class MetricsStatus(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
     )
-    bytes: Annotated[int, Field(ge=0)]
+    bytes_total: Annotated[int, Field(ge=0)]
     clip_threshold_abs: Annotated[int, Field(ge=0)]
     clipped_samples_total: Annotated[int, Field(ge=0)]
     longest_send_stall_ms: Annotated[int, Field(ge=0)]
     network_errors_total: Annotated[int, Field(ge=0)]
     noise_floor: Annotated[int, Field(ge=0)]
-    packets: Annotated[int, Field(ge=0)]
+    packets_total: Annotated[int, Field(ge=0)]
     peak_abs_left: Annotated[int, Field(ge=0)]
     peak_abs_right: Annotated[int, Field(ge=0)]
     playing: bool
     queue_depth: Annotated[int, Field(ge=0)]
     queue_drops_total: Annotated[int, Field(ge=0)]
-    read_errors: Annotated[int, Field(ge=0)]
+    read_errors_total: Annotated[int, Field(ge=0)]
     reconnects_total: Annotated[int, Field(ge=0)]
     rms_left: Annotated[int, Field(ge=0)]
     rms_right: Annotated[int, Field(ge=0)]
     send_stalls_total: Annotated[int, Field(ge=0)]
     sequence: Annotated[int, Field(ge=0)]
-    short_reads: Annotated[int, Field(ge=0)]
-    stale_drops_total: Annotated[int, Field(ge=0)]
+    short_reads_total: Annotated[int, Field(ge=0)]
     tls_handshake_failures_total: Annotated[int, Field(ge=0)]
 
 
@@ -435,6 +438,9 @@ class OtaStatus(BaseModel):
         Field(
             description="Whether this firmware rejects an over-the-air image that is not signed by\nthe vendor key it trusts. Always true on a signed release build; false on\nan unsigned self-build."
         ),
+    ]
+    signing_key_sha256: Annotated[
+        str, Field(description="SHA-256 of signature block 0's public key; empty if unreadable.")
     ]
 
 
@@ -575,7 +581,7 @@ class WifiSettingsRequest(BaseModel):
     model_config = ConfigDict(
         extra="ignore",
     )
-    admin_secret: Annotated[
+    admin_key: Annotated[
         str | None,
         Field(
             description="Generated 48-character lowercase-hex admin key. Empty preserves the\nstored key.",
@@ -583,10 +589,14 @@ class WifiSettingsRequest(BaseModel):
         ),
     ] = None
     password: Annotated[
-        str | None, Field(description="Wi-Fi password. Empty preserves the stored password.")
+        str | None,
+        Field(
+            description="WPA2 password: 8 to 63 bytes or a 64-digit hexadecimal PSK, without NUL.\nEmpty preserves the stored password; first commissioning requires one."
+        ),
     ] = None
     ssid: Annotated[
-        str, Field(description="Wi-Fi network name. Empty names are rejected.", min_length=1)
+        str,
+        Field(description="Wi-Fi network name: 1 to 32 UTF-8 bytes, without NUL.", min_length=1),
     ]
     target_host: Annotated[
         str | None,
@@ -603,7 +613,7 @@ class WifiStatus(BaseModel):
     )
     ap_ip: str
     hostname: str
-    rssi: int
+    rssi_dbm: int
     ssid: str
     sta_ip: str
     status: str
@@ -654,31 +664,6 @@ class Button(BaseModel):
     label: Annotated[
         str, Field(description="Human-readable name the console shows for this button.")
     ]
-
-
-class ConfigResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="ignore",
-    )
-    adc_attenuation_db: Annotated[int, Field(ge=0)]
-    analog_passthrough_enabled: bool
-    auto_update_schedule: AutoUpdateScheduleRequest
-    button_actions: Annotated[
-        list[ButtonActionStatus],
-        Field(description="The effective action of every board button, in descriptor order."),
-    ]
-    config_source: str
-    device_name: str
-    input_gain: Annotated[int, Field(ge=0)]
-    input_line: Annotated[int, Field(ge=0)]
-    led_roles: Annotated[
-        list[LedRoleStatus],
-        Field(description="The effective role of every board LED, in descriptor order."),
-    ]
-    ssid: str
-    target_host: str
-    target_port: Annotated[int, Field(ge=0)]
-    transport: TransportStatus
 
 
 class FactoryResetResponse(BaseModel):
@@ -750,6 +735,31 @@ class LedCapabilityStatus(BaseModel):
     gpio: Annotated[int, Field(ge=0)]
     id: str
     label: str
+
+
+class SettingsResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="ignore",
+    )
+    adc_attenuation_db: Annotated[int, Field(ge=0)]
+    analog_passthrough_enabled: bool
+    auto_update_schedule: AutoUpdateScheduleRequest
+    button_actions: Annotated[
+        list[ButtonActionStatus],
+        Field(description="The effective action of every board button, in descriptor order."),
+    ]
+    config_source: str
+    device_name: str
+    input_gain: Annotated[int, Field(ge=0)]
+    input_line: Annotated[int, Field(ge=0)]
+    led_roles: Annotated[
+        list[LedRoleStatus],
+        Field(description="The effective role of every board LED, in descriptor order."),
+    ]
+    ssid: str
+    target_host: str
+    target_port: Annotated[int, Field(ge=0)]
+    transport: TransportStatus
 
 
 class Board(BaseModel):
@@ -828,6 +838,7 @@ class StatusResponse(BaseModel):
     configuration_writable: bool
     device_name: str
     diagnostics: DiagnosticsStatus
+    firmware_variant: FirmwareVariant
     firmware_version: str
     health: HealthReport
     indicator: IndicatorStatus

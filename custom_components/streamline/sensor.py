@@ -84,7 +84,7 @@ SENSORS: tuple[StreamLineSensorDescription, ...] = (
         native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda status: status.wifi.rssi,
+        value_fn=lambda status: status.wifi.rssi_dbm,
     ),
     StreamLineSensorDescription(
         key="health",

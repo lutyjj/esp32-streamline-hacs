@@ -16,8 +16,8 @@ from .models import (
     AutoUpdateScheduleRequest,
     ButtonAction,
     ButtonActionStatus,
-    ConfigResponse,
     CoredumpResponse,
+    SettingsResponse,
     StatusResponse,
 )
 
@@ -37,7 +37,7 @@ class StreamLineData:
     """Status and slow-changing settings from one device."""
 
     status: StatusResponse
-    settings: ConfigResponse
+    settings: SettingsResponse
     # None until an authenticated read succeeds: the crash dump is admin-key
     # gated, and a device that cannot report one still runs every other entity.
     coredump: CoredumpResponse | None
@@ -63,12 +63,12 @@ class StreamLineCoordinator(DataUpdateCoordinator[StreamLineData]):
         self._entry = entry
         self.client = client
         self._validate_auth = client.has_admin_key
-        self._settings: ConfigResponse | None = None
+        self._settings: SettingsResponse | None = None
         self._settings_poll_count = 0
         self._coredump: CoredumpResponse | None = None
 
     @property
-    def settings(self) -> ConfigResponse:
+    def settings(self) -> SettingsResponse:
         """Return settings loaded during the first successful refresh."""
         return self.data.settings
 

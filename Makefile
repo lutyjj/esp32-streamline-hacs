@@ -10,12 +10,9 @@ TESTS := tests
 MODELS := $(SOURCE)/models.py
 GENERATED_MODELS := .models.generated.py
 MANIFEST := $(SOURCE)/manifest.json
-# The StreamLine 0.11.1 device contract is the compatibility baseline: every
-# authenticated endpoint answers with an RFC 7616 digest challenge instead of
-# reading a bearer token, so the integration cannot write to a device below
-# 0.11.0. Advance this immutable commit only when the integration
-# intentionally requires a newer device contract.
-STREAMLINE_CONTRACT_REF := c73d5e8ce1c743230a0a1f08678b940bb4fa34f1
+# Generate models and test payloads from one immutable device contract.
+# Advance this pin and regenerate the models together.
+STREAMLINE_CONTRACT_REF := 192d095cc6ea8be48eb455ab40e5ffdbf66015b6
 STREAMLINE_REF ?= $(STREAMLINE_CONTRACT_REF)
 OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
 # Rules the contract's own prose, carried into generated docstrings, cannot

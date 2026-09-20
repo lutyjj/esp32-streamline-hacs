@@ -22,10 +22,10 @@ from .models import (
     AutoUpdateScheduleRequest,
     ButtonAction,
     ButtonSettingsRequest,
-    ConfigResponse,
     CoredumpResponse,
     ErrorResponse,
     FirmwareSettingsRequest,
+    SettingsResponse,
     StatusResponse,
     StreamRequest,
 )
@@ -69,9 +69,9 @@ class StreamLineDeviceClient:
         """Read device status, metrics, and capabilities."""
         return await self._request("GET", "/api/status", StatusResponse)
 
-    async def async_get_settings(self) -> ConfigResponse:
+    async def async_get_settings(self) -> SettingsResponse:
         """Read persisted device settings."""
-        return await self._request("GET", "/api/settings", ConfigResponse)
+        return await self._request("GET", "/api/settings", SettingsResponse)
 
     async def async_get_coredump(self) -> CoredumpResponse:
         """Read whether a panic left a crash dump on the device."""

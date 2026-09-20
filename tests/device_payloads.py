@@ -1,6 +1,6 @@
 """Device payloads derived from the contract's canonical example device.
 
-The pinned artifact's ``StatusResponse`` and ``ConfigResponse`` schema
+The pinned artifact's ``StatusResponse`` and ``SettingsResponse`` schema
 examples are the base state; the keyword arguments express the scenarios
 tests drive. Every payload is validated against its generated model, so a
 payload can only break when the contract itself changed.
@@ -15,9 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from custom_components.streamline.models import (
-    ConfigResponse,
     CoredumpResponse,
     ErrorResponse,
+    SettingsResponse,
     StatusResponse,
 )
 
@@ -25,7 +25,7 @@ DEVICE_URL = "http://device.local"
 
 _SCHEMAS = json.loads(Path(os.environ["STREAMLINE_OPENAPI"]).read_text())["components"]["schemas"]
 _STATUS_EXAMPLE: dict[str, Any] = _SCHEMAS["StatusResponse"]["example"]
-_CONFIG_EXAMPLE: dict[str, Any] = _SCHEMAS["ConfigResponse"]["example"]
+_CONFIG_EXAMPLE: dict[str, Any] = _SCHEMAS["SettingsResponse"]["example"]
 
 
 def device_status(
@@ -74,7 +74,7 @@ def device_settings(
     payload = copy.deepcopy(_CONFIG_EXAMPLE)
     payload["device_name"] = name
     payload["auto_update_schedule"] = schedule
-    ConfigResponse.model_validate(payload)
+    SettingsResponse.model_validate(payload)
     return payload
 
 
