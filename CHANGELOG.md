@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/lutyjj/esp32-streamline-hacs/compare/v0.3.0...v0.3.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* align generated models with the current device contract ([a60e8ea](https://github.com/lutyjj/esp32-streamline-hacs/commit/a60e8ea411e104e9b82528e48c3834aa5f385d3a))
+
 ## [0.3.0](https://github.com/lutyjj/esp32-streamline-hacs/compare/v0.2.0...v0.3.0) (2026-08-01)
 
 
