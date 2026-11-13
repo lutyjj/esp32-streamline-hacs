@@ -27,13 +27,23 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      # With the default token, CI on the release PR waits for a manual
-      # "Approve and run"; set a RELEASE_PLEASE_TOKEN fine-grained PAT to make
-      # it start on its own.
+      # Create the draft release when a release PR merges without also opening
+      # a next-version PR: the git tag only exists once the publish job turns
+      # the draft into a published release.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          skip-github-pull-request: true
+
+      # With the default token, CI on the release PR waits for a manual
+      # "Approve and run"; set a RELEASE_PLEASE_TOKEN fine-grained PAT to make
+      # it start on its own.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        if: ${{ steps.release.outputs.release_created != 'true' }}
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          skip-github-release: true
 
   publish:
     name: Publish
