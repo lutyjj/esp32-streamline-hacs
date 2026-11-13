@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/lutyjj/esp32-streamline-hacs/compare/v0.3.1...v0.4.0) (2026-11-13)
+
+
+### Features
+
+* sync the 0.17 device contract and expose LED, profile, and loss entities ([e0b473b](https://github.com/lutyjj/esp32-streamline-hacs/commit/e0b473b20a43ff0d0bbc0ef18c36edc7644ccabe))
+
+
+### Bug Fixes
+
+* use the entry title when the device has no configured name ([340df4e](https://github.com/lutyjj/esp32-streamline-hacs/commit/340df4e21802175b1c58e88927d1ab017f6fa44b))
+
 ## [0.3.1](https://github.com/lutyjj/esp32-streamline-hacs/compare/v0.3.0...v0.3.1) (2026-09-20)
 
 
