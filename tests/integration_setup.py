@@ -51,13 +51,16 @@ def stub_device(
 
 
 async def setup_integration(
-    hass: HomeAssistant, *, admin_key: str | None = ADMIN_KEY
+    hass: HomeAssistant,
+    *,
+    admin_key: str | None = ADMIN_KEY,
+    title: str = "Living Room StreamLine",
 ) -> MockConfigEntry:
     """Set up one mocked device entry."""
     data = {CONF_DEVICE_URL: DEVICE_URL}
     if admin_key is not None:
         data[CONF_ADMIN_KEY] = admin_key
-    entry = MockConfigEntry(domain=DOMAIN, title="Living Room StreamLine", data=data)
+    entry = MockConfigEntry(domain=DOMAIN, title=title, data=data)
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()

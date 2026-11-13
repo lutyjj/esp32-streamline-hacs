@@ -6,8 +6,11 @@ from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
+from homeassistant.helpers import device_registry as dr
 
-from .device_payloads import DEVICE_URL, device_coredump, device_status
+from custom_components.streamline.const import DOMAIN
+
+from .device_payloads import DEVICE_URL, device_coredump, device_settings, device_status
 from .integration_setup import setup_integration, state_of, stub_device
 
 if TYPE_CHECKING:
@@ -356,3 +359,21 @@ async def test_a_device_refusing_crash_dump_reads_keeps_every_other_entity(
 
     assert state_of(hass, PLAYING_SENSOR) == STATE_ON
     assert state_of(hass, CRASH_DUMP_SENSOR) == STATE_UNAVAILABLE
+
+
+async def test_unnamed_device_uses_entry_title_for_device_and_entities(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(
+        aioclient_mock,
+        status=device_status(name=""),
+        settings=device_settings(name=""),
+    )
+
+    entry = await setup_integration(hass, title="device.local")
+
+    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    assert device is not None
+    assert device.name == "device.local"
+    assert state_of(hass, "binary_sensor.device_local_playing") == STATE_ON
+    assert state_of(hass, "switch.device_local_streaming") == STATE_ON

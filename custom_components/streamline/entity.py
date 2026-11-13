@@ -28,7 +28,7 @@ class StreamLineEntity(CoordinatorEntity[StreamLineCoordinator]):
     def __init__(self, entry: StreamLineConfigEntry, key: str) -> None:
         super().__init__(entry.runtime_data)
         self._attr_unique_id = f"{entry.entry_id}:{key}"
-        self._device_identifier = entry.entry_id
+        self._entry = entry
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -36,10 +36,10 @@ class StreamLineEntity(CoordinatorEntity[StreamLineCoordinator]):
         status = self.coordinator.status
         return DeviceInfo(
             configuration_url=self.coordinator.client.device_url,
-            identifiers={(DOMAIN, self._device_identifier)},
+            identifiers={(DOMAIN, self._entry.entry_id)},
             manufacturer="ESP32 StreamLine",
             model=status.capabilities.board,
-            name=status.device_name,
+            name=status.device_name.strip() or self._entry.title,
             sw_version=status.firmware_version,
         )
 
