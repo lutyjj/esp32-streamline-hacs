@@ -69,6 +69,9 @@
       }
     },
     "select": {
+      "audio_profile": {
+        "name": "Audio profile"
+      },
       "automatic_update_schedule": {
         "name": "Automatic update schedule",
         "state": {
@@ -93,9 +96,20 @@
       },
       "input": {
         "name": "Input"
+      },
+      "led_role": {
+        "name": "{led} role",
+        "state": {
+          "off": "Off",
+          "on": "On",
+          "status": "Status"
+        }
       }
     },
     "sensor": {
+      "capture_lost_packets": {
+        "name": "Capture lost packets"
+      },
       "health": {
         "name": "Health",
         "state": {
@@ -135,8 +149,14 @@
       "peak_level": {
         "name": "Peak level"
       },
+      "queue_drops": {
+        "name": "Queue drops"
+      },
       "reset_reason": {
         "name": "Reset reason"
+      },
+      "send_failed_packets": {
+        "name": "Send failed packets"
       },
       "send_stalls": {
         "name": "Send stalls"

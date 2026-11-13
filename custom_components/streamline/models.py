@@ -384,6 +384,7 @@ class MetricsStatus(BaseModel):
         extra="ignore",
     )
     bytes_total: Annotated[int, Field(ge=0)]
+    capture_lost_packets_total: Annotated[int, Field(ge=0)]
     clip_threshold_abs: Annotated[int, Field(ge=0)]
     clipped_samples_total: Annotated[int, Field(ge=0)]
     longest_send_stall_ms: Annotated[int, Field(ge=0)]
@@ -399,9 +400,11 @@ class MetricsStatus(BaseModel):
     reconnects_total: Annotated[int, Field(ge=0)]
     rms_left: Annotated[int, Field(ge=0)]
     rms_right: Annotated[int, Field(ge=0)]
+    send_failed_packets_total: Annotated[int, Field(ge=0)]
     send_stalls_total: Annotated[int, Field(ge=0)]
     sequence: Annotated[int, Field(ge=0)]
     short_reads_total: Annotated[int, Field(ge=0)]
+    silence_packets_total: Annotated[int, Field(ge=0)]
     tls_handshake_failures_total: Annotated[int, Field(ge=0)]
 
 

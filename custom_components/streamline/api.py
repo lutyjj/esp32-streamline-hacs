@@ -17,7 +17,9 @@ from .errors import (
 )
 from .models import (
     Ack,
+    ActiveAudioProfileRequest,
     AnalogPassthroughSettingsRequest,
+    AudioProfileCatalog,
     AudioSettingsRequest,
     AutoUpdateScheduleRequest,
     ButtonAction,
@@ -25,6 +27,8 @@ from .models import (
     CoredumpResponse,
     ErrorResponse,
     FirmwareSettingsRequest,
+    LedRole,
+    LedSettingsRequest,
     SettingsResponse,
     StatusResponse,
     StreamRequest,
@@ -73,6 +77,10 @@ class StreamLineDeviceClient:
         """Read persisted device settings."""
         return await self._request("GET", "/api/settings", SettingsResponse)
 
+    async def async_get_audio_profiles(self) -> AudioProfileCatalog:
+        """Read saved audio profiles and which profile is active."""
+        return await self._request("GET", "/api/audio-profiles", AudioProfileCatalog)
+
     async def async_get_coredump(self) -> CoredumpResponse:
         """Read whether a panic left a crash dump on the device."""
         return await self._request("GET", "/api/coredump", CoredumpResponse, authenticated=True)
@@ -95,6 +103,16 @@ class StreamLineDeviceClient:
                 input_gain=input_gain,
                 adc_attenuation_db=adc_attenuation_db,
             ),
+        )
+
+    async def async_set_audio_profile(self, profile_id: str) -> Ack:
+        """Activate one saved audio profile by id."""
+        return await self._request(
+            "POST",
+            "/api/settings/audio-profile",
+            Ack,
+            authenticated=True,
+            form=ActiveAudioProfileRequest(profile_id=profile_id),
         )
 
     async def async_set_analog_passthrough(self, enabled: bool) -> Ack:
@@ -125,6 +143,16 @@ class StreamLineDeviceClient:
             Ack,
             authenticated=True,
             form=ButtonSettingsRequest(id=button_id, action=ButtonAction.model_validate(action)),
+        )
+
+    async def async_set_led(self, led_id: str, role: str) -> Ack:
+        """Assign one board LED, named by its capabilities id, a new role."""
+        return await self._request(
+            "POST",
+            "/api/settings/led",
+            Ack,
+            authenticated=True,
+            form=LedSettingsRequest(id=led_id, role=LedRole.model_validate(role)),
         )
 
     async def async_restart(self) -> Ack:

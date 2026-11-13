@@ -12,7 +12,7 @@ GENERATED_MODELS := .models.generated.py
 MANIFEST := $(SOURCE)/manifest.json
 # Generate models and test payloads from one immutable device contract.
 # Advance this pin and regenerate the models together.
-STREAMLINE_CONTRACT_REF := 192d095cc6ea8be48eb455ab40e5ffdbf66015b6
+STREAMLINE_CONTRACT_REF := 731e69e28b9898088b038a11c51c6f0de22d2c2a
 STREAMLINE_REF ?= $(STREAMLINE_CONTRACT_REF)
 OPENAPI_URL := https://raw.githubusercontent.com/lutyjj/esp32-streamline/$(STREAMLINE_REF)/docs/openapi.json
 # Rules the contract's own prose, carried into generated docstrings, cannot

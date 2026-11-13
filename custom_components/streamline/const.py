@@ -5,7 +5,7 @@ from typing import cast, get_args
 
 from homeassistant.const import Platform
 
-from .models import AutoUpdateScheduleRequest, ButtonAction
+from .models import AutoUpdateScheduleRequest, ButtonAction, LedRole
 
 DOMAIN = "streamline"
 CONF_DEVICE_URL = "device_url"
@@ -15,6 +15,7 @@ UPDATE_SCHEDULES = cast(
     "tuple[str, ...]", get_args(AutoUpdateScheduleRequest.model_fields["root"].annotation)
 )
 BUTTON_ACTIONS = cast("tuple[str, ...]", get_args(ButtonAction.model_fields["root"].annotation))
+LED_ROLES = cast("tuple[str, ...]", get_args(LedRole.model_fields["root"].annotation))
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,

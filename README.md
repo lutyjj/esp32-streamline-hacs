@@ -24,8 +24,10 @@ Each ESP32 appears as one Home Assistant device.
 | Peak level | Reports the highest current input level. |
 | Streaming | Pauses and resumes the audio stream to the bridge. |
 | Input, input gain, ADC attenuation | Control the device audio input. |
+| Audio profile | Selects a saved audio profile on the device. |
 | Analog passthrough | Controls local analog output on supported boards. |
 | Button actions | Assigns what each physical board button does on a press. |
+| LED roles | Assigns the role of each physical board LED. |
 | Restart | Reboots the device. |
 | Wi-Fi signal, health | Report connectivity and startup health. |
 | PCM encryption | Reports whether the device-to-bridge audio transport uses TLS-PSK. |
@@ -33,14 +35,14 @@ Each ESP32 appears as one Home Assistant device.
 | Automatic update schedule | Selects disabled, daily, or weekly device-managed updates. |
 | OTA status | Reports update phase, message, rollback availability, and the persisted last attempt. |
 | Crash dump | Reports whether a panic left a dump on the device. Needs the admin key. |
-| Network errors, send stalls, reset reason, signed updates | Extra diagnostics, disabled by default. |
+| Capture lost packets, queue drops, send failed packets, network errors, send stalls, reset reason, signed updates | Extra diagnostics, disabled by default. |
 
 Streaming is runtime state: the device resumes streaming after a reboot, and
 the `toggle_stream` button action flips the same switch from the board.
 
-Board buttons come from the device's own capabilities, so a board that
-advertises no buttons gets no button entities, and selecting another board in
-the device console changes them under a running entry.
+Board buttons, LEDs, and saved audio profiles come from the device's own
+capabilities and catalog, so an unadvertised capability gets no entity, and
+changes in the device console appear under a running entry.
 
 Controls require the device admin key. Monitoring works without it.
 
@@ -56,13 +58,12 @@ device credential.
 ## Requirements
 
 - Home Assistant 2026.7 or newer
-- ESP32 StreamLine firmware 0.11.0 or newer
+- ESP32 StreamLine firmware 0.15.0 or newer
 - Network access from Home Assistant to the device HTTP API
 - The device admin key for controls and firmware management
 
-Firmware 0.11.0 replaced bearer tokens with RFC 7616 digest authentication, so
-the admin key never crosses the network. Monitoring an older device still
-works, but controls and firmware management need 0.11.0 or newer.
+Authenticated requests use RFC 7616 digest authentication, so the admin key
+never crosses the network.
 
 ## Install
 

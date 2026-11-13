@@ -11,9 +11,14 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from custom_components.streamline.api import StreamLineDeviceClient
-from custom_components.streamline.const import BUTTON_ACTIONS, UPDATE_SCHEDULES
+from custom_components.streamline.const import BUTTON_ACTIONS, LED_ROLES, UPDATE_SCHEDULES
 
-from .device_payloads import device_coredump, device_settings, device_status
+from .device_payloads import (
+    device_audio_profiles,
+    device_coredump,
+    device_settings,
+    device_status,
+)
 from .digest_device import DigestDevice
 
 if TYPE_CHECKING:
@@ -26,6 +31,7 @@ TRANSLATIONS: dict[str, Any] = json.loads(
 )
 
 SUPPORTED_OPERATIONS = {
+    "get_audio_profiles",
     "get_coredump",
     "get_settings",
     "get_status",
@@ -34,8 +40,10 @@ SUPPORTED_OPERATIONS = {
     "restart",
     "set_analog_passthrough",
     "set_audio",
+    "set_audio_profile",
     "set_button",
     "set_firmware",
+    "set_led",
     "set_stream",
     "unlock",
 }
@@ -44,7 +52,6 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "activate_transport_key": "transport encryption requires the coordinated bridge workflow",
     "discard_transport_key": "transport encryption requires the coordinated bridge workflow",
     "factory_reset": "destructive device recovery stays in the device console",
-    "get_audio_profiles": "audio profile authoring stays in the device console",
     "get_boards": "board selection stays in the device console",
     "get_coredump_image": "a crash dump is an ELF image for espcoredump.py, not a device control",
     "get_health": "device status already embeds the health report",
@@ -57,10 +64,8 @@ INTENTIONALLY_UNSUPPORTED_OPERATIONS = {
     "retire_transport_key": "transport encryption requires the coordinated bridge workflow",
     "rollback_transport_key": "transport encryption requires the coordinated bridge workflow",
     "set_admin_key": "credential management stays in the device console",
-    "set_audio_profile": "audio profile authoring stays in the device console",
     "set_audio_profiles": "audio profile authoring stays in the device console",
     "set_board": "board selection stays in the device console",
-    "set_led": "board LED role assignment stays in the device console",
     "set_name": "device identity stays in the device console",
     "set_target": "bridge destination setup stays in the device console",
     "set_transport_mode": "transport encryption requires the coordinated bridge workflow",
@@ -147,6 +152,14 @@ def test_button_action_options_and_translations_match_openapi() -> None:
     assert set(translations) == set(contract_options)
 
 
+def test_led_role_options_and_translations_match_openapi() -> None:
+    contract_options = OPENAPI["components"]["schemas"]["LedRole"]["enum"]
+    translations = TRANSLATIONS["entity"]["select"]["led_role"]["state"]
+
+    assert set(LED_ROLES) == set(contract_options)
+    assert set(translations) == set(contract_options)
+
+
 def _operation_payload(operation_id: str) -> dict[str, Any]:
     """Return a contract-shaped response body for one supported operation."""
     match operation_id:
@@ -154,6 +167,8 @@ def _operation_payload(operation_id: str) -> dict[str, Any]:
             return device_status()
         case "get_settings":
             return device_settings()
+        case "get_audio_profiles":
+            return device_audio_profiles()
         case "get_coredump":
             return device_coredump()
         case "ota_check" | "ota_update":
@@ -188,12 +203,15 @@ async def test_every_client_operation_matches_openapi_contract(
         device = StreamLineDeviceClient(async_get_clientsession(hass), served_device.url, ADMIN_KEY)
         await device.async_get_status()
         await device.async_get_settings()
+        await device.async_get_audio_profiles()
         await device.async_get_coredump()
         await device.async_unlock()
         await device.async_set_audio(2, 25, 3)
+        await device.async_set_audio_profile("vinyl")
         await device.async_set_analog_passthrough(True)
         await device.async_set_stream(False)
         await device.async_set_button("key1", "cycle_input")
+        await device.async_set_led("status", "status")
         await device.async_set_update_schedule("weekly")
         await device.async_check_firmware_update()
         await device.async_install_firmware_update()
@@ -213,6 +231,7 @@ async def test_every_client_operation_matches_openapi_contract(
 
     exercised_methods = {
         "async_check_firmware_update",
+        "async_get_audio_profiles",
         "async_get_coredump",
         "async_get_settings",
         "async_get_status",
@@ -220,7 +239,9 @@ async def test_every_client_operation_matches_openapi_contract(
         "async_restart",
         "async_set_analog_passthrough",
         "async_set_audio",
+        "async_set_audio_profile",
         "async_set_button",
+        "async_set_led",
         "async_set_stream",
         "async_set_update_schedule",
         "async_unlock",

@@ -10,6 +10,7 @@ from custom_components.streamline.const import CONF_ADMIN_KEY, CONF_DEVICE_URL, 
 
 from .device_payloads import (
     DEVICE_URL,
+    device_audio_profiles,
     device_coredump,
     device_settings,
     device_status,
@@ -29,12 +30,17 @@ def stub_device(
     status: dict[str, Any] | None = None,
     unlock_status: int = 200,
     settings: dict[str, Any] | None = None,
+    audio_profiles: dict[str, Any] | None = None,
     coredump: dict[str, Any] | None = None,
     coredump_status: int = 200,
 ) -> None:
     """Stub coordinator reads and initial authentication."""
     aioclient_mock.get(f"{DEVICE_URL}/api/status", json=status or device_status())
     aioclient_mock.get(f"{DEVICE_URL}/api/settings", json=settings or device_settings())
+    aioclient_mock.get(
+        f"{DEVICE_URL}/api/audio-profiles",
+        json=audio_profiles or device_audio_profiles(),
+    )
     aioclient_mock.get(
         f"{DEVICE_URL}/api/coredump",
         status=coredump_status,

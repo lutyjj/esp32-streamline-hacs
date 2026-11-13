@@ -5,12 +5,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
+from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.streamline.const import DOMAIN
 
-from .device_payloads import DEVICE_URL, device_coredump, device_settings, device_status
+from .device_payloads import (
+    DEVICE_URL,
+    device_audio_profiles,
+    device_coredump,
+    device_settings,
+    device_status,
+)
 from .integration_setup import setup_integration, state_of, stub_device
 
 if TYPE_CHECKING:
@@ -23,7 +30,11 @@ WIFI_SENSOR = "sensor.living_room_streamline_wi_fi_signal"
 HEALTH_SENSOR = "sensor.living_room_streamline_health"
 ENCRYPTION_SENSOR = "sensor.living_room_streamline_pcm_encryption"
 OTA_SENSOR = "sensor.living_room_streamline_ota_status"
+CAPTURE_LOST_SENSOR = "sensor.living_room_streamline_capture_lost_packets"
+QUEUE_DROPS_SENSOR = "sensor.living_room_streamline_queue_drops"
+SEND_FAILED_SENSOR = "sensor.living_room_streamline_send_failed_packets"
 INPUT_SELECT = "select.living_room_streamline_input"
+AUDIO_PROFILE_SELECT = "select.living_room_streamline_audio_profile"
 UPDATE_SCHEDULE_SELECT = "select.living_room_streamline_automatic_update_schedule"
 GAIN_NUMBER = "number.living_room_streamline_input_gain"
 ATTENUATION_NUMBER = "number.living_room_streamline_adc_attenuation"
@@ -31,6 +42,7 @@ PASSTHROUGH_SWITCH = "switch.living_room_streamline_analog_passthrough"
 FIRMWARE_UPDATE = "update.living_room_streamline_firmware"
 STREAM_SWITCH = "switch.living_room_streamline_streaming"
 KEY1_ACTION_SELECT = "select.living_room_streamline_key_1_action"
+STATUS_LED_ROLE_SELECT = "select.living_room_streamline_status_light_d4_role"
 RESTART_BUTTON = "button.living_room_streamline_restart"
 CRASH_DUMP_SENSOR = "binary_sensor.living_room_streamline_crash_dump"
 
@@ -78,11 +90,14 @@ async def test_read_only_entry_keeps_monitoring_and_disables_controls(
 
     assert state_of(hass, PLAYING_SENSOR) == STATE_ON
     assert state_of(hass, INPUT_SELECT) == STATE_UNAVAILABLE
+    assert state_of(hass, AUDIO_PROFILE_SELECT) == STATE_UNAVAILABLE
     assert state_of(hass, GAIN_NUMBER) == STATE_UNAVAILABLE
     assert state_of(hass, PASSTHROUGH_SWITCH) == STATE_UNAVAILABLE
     assert state_of(hass, UPDATE_SCHEDULE_SELECT) == STATE_UNAVAILABLE
+    assert state_of(hass, STATUS_LED_ROLE_SELECT) == STATE_UNAVAILABLE
     assert state_of(hass, FIRMWARE_UPDATE) == STATE_UNAVAILABLE
     assert {call[1].path for call in aioclient_mock.mock_calls} == {
+        "/api/audio-profiles",
         "/api/settings",
         "/api/status",
     }
@@ -315,6 +330,157 @@ async def test_button_selects_are_absent_on_a_board_without_buttons(
     await setup_integration(hass)
 
     assert hass.states.get(KEY1_ACTION_SELECT) is None
+
+
+async def test_led_role_selects_follow_the_board_and_persist(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/led", json={"ok": True})
+    await setup_integration(hass)
+
+    led = hass.states.get(STATUS_LED_ROLE_SELECT)
+    assert led is not None
+    assert led.state == "status"
+    assert set(led.attributes["options"]) == {"off", "on", "status"}
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": STATUS_LED_ROLE_SELECT, "option": "off"},
+        blocking=True,
+    )
+
+    assigned = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/led"
+    )
+    assert assigned[2] == {"id": "status", "role": "off"}
+    assert state_of(hass, STATUS_LED_ROLE_SELECT) == "off"
+
+
+async def test_led_selects_are_absent_on_a_board_without_leds(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    status = device_status()
+    status["capabilities"]["leds"] = []
+    stub_device(aioclient_mock, status=status)
+
+    await setup_integration(hass)
+
+    assert hass.states.get(STATUS_LED_ROLE_SELECT) is None
+
+
+async def test_audio_profile_select_activates_saved_profile_and_clears_on_manual_audio_change(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio-profile", json={"ok": True})
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio", json={"ok": True})
+    await setup_integration(hass)
+
+    profile = hass.states.get(AUDIO_PROFILE_SELECT)
+    assert profile is not None
+    assert profile.state == "Vinyl"
+    assert profile.attributes["options"] == ["Vinyl", "CD player"]
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": AUDIO_PROFILE_SELECT, "option": "CD player"},
+        blocking=True,
+    )
+
+    activated = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/audio-profile"
+    )
+    assert activated[2] == {"profile_id": "cd"}
+    assert state_of(hass, AUDIO_PROFILE_SELECT) == "CD player"
+    assert state_of(hass, INPUT_SELECT) == "Line 1 — header pins"
+    assert state_of(hass, ATTENUATION_NUMBER) == "3"
+
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {"entity_id": GAIN_NUMBER, "value": 40},
+        blocking=True,
+    )
+
+    assert state_of(hass, AUDIO_PROFILE_SELECT) == STATE_UNKNOWN
+
+
+async def test_duplicate_audio_profile_names_remain_individually_selectable(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    profiles = device_audio_profiles(
+        active_profile_id="vinyl-2",
+        profiles=[
+            {
+                "id": "vinyl",
+                "name": "Vinyl",
+                "audio": {"input_line": 1, "input_gain": 10, "adc_attenuation_db": 6},
+            },
+            {
+                "id": "vinyl-2",
+                "name": "Vinyl",
+                "audio": {"input_line": 2, "input_gain": 0, "adc_attenuation_db": 9},
+            },
+        ],
+    )
+    stub_device(aioclient_mock, audio_profiles=profiles)
+    aioclient_mock.post(f"{DEVICE_URL}/api/settings/audio-profile", json={"ok": True})
+    await setup_integration(hass)
+
+    select = hass.states.get(AUDIO_PROFILE_SELECT)
+    assert select is not None
+    assert select.state == "Vinyl (vinyl-2)"
+    assert select.attributes["options"] == ["Vinyl (vinyl)", "Vinyl (vinyl-2)"]
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": AUDIO_PROFILE_SELECT, "option": "Vinyl (vinyl)"},
+        blocking=True,
+    )
+
+    activated = next(
+        call for call in aioclient_mock.mock_calls if call[1].path == "/api/settings/audio-profile"
+    )
+    assert activated[2] == {"profile_id": "vinyl"}
+
+
+async def test_audio_profile_select_is_absent_when_no_profiles_are_saved(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    stub_device(aioclient_mock, audio_profiles=device_audio_profiles(profiles=[]))
+
+    await setup_integration(hass)
+
+    assert hass.states.get(AUDIO_PROFILE_SELECT) is None
+
+
+async def test_packet_loss_diagnostic_sensors_report_stream_counters(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    status = device_status()
+    status["metrics"]["capture_lost_packets_total"] = 4
+    status["metrics"]["queue_drops_total"] = 7
+    status["metrics"]["send_failed_packets_total"] = 2
+    stub_device(aioclient_mock, status=status)
+    entry = await setup_integration(hass)
+
+    registry = er.async_get(hass)
+    for entity_id in (CAPTURE_LOST_SENSOR, QUEUE_DROPS_SENSOR, SEND_FAILED_SENSOR):
+        entity_entry = registry.async_get(entity_id)
+        assert entity_entry is not None
+        assert entity_entry.disabled
+        registry.async_update_entity(entity_id, disabled_by=None)
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert state_of(hass, CAPTURE_LOST_SENSOR) == "4"
+    assert state_of(hass, QUEUE_DROPS_SENSOR) == "7"
+    assert state_of(hass, SEND_FAILED_SENSOR) == "2"
 
 
 async def test_restart_button_reboots_the_device(

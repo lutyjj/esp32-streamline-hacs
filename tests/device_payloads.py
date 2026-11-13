@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from custom_components.streamline.models import (
+    AudioProfileCatalog,
     CoredumpResponse,
     ErrorResponse,
     SettingsResponse,
@@ -75,6 +76,48 @@ def device_settings(
     payload["device_name"] = name
     payload["auto_update_schedule"] = schedule
     SettingsResponse.model_validate(payload)
+    return payload
+
+
+def device_audio_profiles(
+    *,
+    active_profile_id: str | None = "vinyl",
+    profiles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Return one saved audio profile catalog payload.
+
+    The contract carries no example for this schema, so the payload is built
+    from the example device's board and audio settings and validated against
+    the generated model.
+    """
+    default_profiles = [
+        {
+            "id": "vinyl",
+            "name": "Vinyl",
+            "audio": {
+                "input_line": _STATUS_EXAMPLE["audio"]["input_line"],
+                "input_gain": _STATUS_EXAMPLE["audio"]["input_gain"],
+                "adc_attenuation_db": _STATUS_EXAMPLE["audio"]["adc_attenuation_db"],
+            },
+        },
+        {
+            "id": "cd",
+            "name": "CD player",
+            "audio": {
+                "input_line": 1,
+                "input_gain": 0,
+                "adc_attenuation_db": 3,
+            },
+        },
+    ]
+    selected_profiles = default_profiles if profiles is None else profiles
+    payload = {
+        "schema_version": 1,
+        "board_id": _STATUS_EXAMPLE["capabilities"]["board_id"],
+        "active_profile_id": active_profile_id if selected_profiles else None,
+        "profiles": selected_profiles,
+    }
+    AudioProfileCatalog.model_validate(payload)
     return payload
 
 
